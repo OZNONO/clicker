@@ -1,4 +1,4 @@
-# Lutie-like RPG Clicker v0.2
+# Lutie-like RPG Clicker v0.2.1
 
 A personal reconstruction prototype exploring the overall structure and feel of a discontinued mobile RPG clicker. It uses original CSS placeholder shapes only; no original copyrighted image or audio assets are included.
 
@@ -15,10 +15,11 @@ Double-click `index.html` and play in a modern browser. There is no build step, 
 - Mobile layout with persistent combat view and five bottom tabs
 - Ten-placeholder Guardian roster with encounters at Stages 5, 15, 25, and so on
 - Region Bosses at Stages 10, 20, 30, and so on
-- Thirty-second timed encounters, failure farming, and manual boss retry
-- Independent Guardian levels, x1/x10/MAX upgrades, and permanent reincarnation levels
-- Mimics with bonus Gold and Mana Stone drops
-- Farming-only Nazar encounters with escalating HP
+- Thirty-second timed encounters, optional **Give Up**, failure farming, and manual boss retry
+- Guaranteed Region Boss Mana Stone rewards (Normal, with a provisional High upgrade chance)
+- Independent Guardian levels, exact +1/+10/MAX upgrades, groups, acquisition-order sorting, and permanent reincarnation levels
+- Mimics with a provisional 1% appearance rate, bonus Gold, and Mana Stone drops
+- Farming-only Nazar indicator and encounters with hidden, exponentially escalating HP
 - Normal, High, and Legendary Mana Stones with Stage-based effective-level caps
 - One-stone-per-Guardian equip and unequip rules
 - Lutie active-skill slots; Flare Ray is the single functional prototype skill
@@ -28,7 +29,7 @@ Double-click `index.html` and play in a modern browser. There is no build step, 
 
 ## Save data and migration
 
-The full game is a single JSON-serializable save object. Version 2 separates current-run state from permanent discovery and progression. Existing version 1 saves are migrated without intentionally deleting their Gold, Stage, Lutie level, first Guardian level/unlock, or boss retry/farming progress.
+The full game is a single JSON-serializable save object. Version 3 adds stable Guardian acquisition order and sort preferences to the run/permanent state introduced in v0.2. Version 1 and Version 2 saves are migrated without intentionally deleting Gold, Stage, Lutie level, Guardian level/discovery/reincarnation/Stone data, or boss retry/farming progress.
 
 `game.js` and `ui.js` never access browser storage directly. They use the adapter boundary in `storage.js`:
 
@@ -58,4 +59,4 @@ Run:
 node tests/smoke.test.cjs
 ```
 
-The smoke suite covers the 34 requested combat, encounter, roster, Mana Stone, Nazar, reincarnation, Artifact, bulk-upgrade, save, migration, import, and reset behaviors.
+The smoke suite retains the v0.2 coverage and adds deterministic checks for guaranteed Region Boss Stones, Give Up, farming persistence, Nazar UX/escalation, exact +10 purchases, Guardian sorting, acquisition order, and v2→v3 migration.

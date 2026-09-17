@@ -5,18 +5,20 @@
   const elements = {
     stage: $("stageValue"), gold: $("goldValue"), stageLabel: $("stageLabel"), name: $("monsterName"), kills: $("killCount"),
     hp: $("hpValue"), hpFill: $("hpFill"), encounterBadge: $("encounterBadge"), attackArea: $("attackArea"),
+    nazarIndicator: $("nazarIndicator"), giveUpBoss: $("giveUpBoss"),
     bossTimerWrap: $("bossTimerWrap"), bossTimerValue: $("bossTimerValue"), farmingBanner: $("farmingBanner"),
     farmingStage: $("farmingStage"), nextBossHp: $("nextBossHp"), challengeBoss: $("challengeBoss"),
     monsterButton: $("monsterButton"), damageLayer: $("damageLayer"), tapStat: $("tapStat"), dpsStat: $("dpsStat"),
     lutieLevel: $("lutieLevel"), lutieTap: $("lutieTap"), lutieCost: $("lutieCost"), lutieUpgrade: $("lutieUpgrade"),
     lutieUpgrade10: $("lutieUpgrade10"), lutieUpgradeMax: $("lutieUpgradeMax"), skillGrid: $("skillGrid"),
-    guardianTotalDps: $("guardianTotalDps"), guardianList: $("guardianList"), stoneCount: $("stoneCount"), stoneList: $("stoneList"),
+    guardianTotalDps: $("guardianTotalDps"), guardianSort: $("guardianSort"), guardianList: $("guardianList"), stoneCount: $("stoneCount"), stoneList: $("stoneList"),
     starsValue: $("starsValue"), starsPreview: $("starsPreview"), reincarnateButton: $("reincarnateButton"), artifactList: $("artifactList"),
     saveNow: $("saveNow"), exportSave: $("exportSave"), importSave: $("importSave"), importFile: $("importFile"),
     damageNumbers: $("damageNumbers"), hitAnimations: $("hitAnimations"), reset: $("resetSave"), developerInfo: $("developerInfo"),
     reincarnateModal: $("reincarnateModal"), modalStars: $("modalStars"), cancelReincarnate: $("cancelReincarnate"), confirmReincarnate: $("confirmReincarnate"),
     clearOverlay: $("clearOverlay"), continueButton: $("continueButton"), acquisitionOverlay: $("acquisitionOverlay"),
-    acquisitionName: $("acquisitionName"), acquisitionDps: $("acquisitionDps"), toast: $("toast")
+    acquisitionName: $("acquisitionName"), acquisitionDps: $("acquisitionDps"), stoneAcquisitionOverlay: $("stoneAcquisitionOverlay"),
+    stoneAcquisitionName: $("stoneAcquisitionName"), stoneAcquisitionPower: $("stoneAcquisitionPower"), toast: $("toast")
   };
 
   function formatNumber(value) {
@@ -41,9 +43,9 @@
   let acquisitionTimer = null;
   let toastTimer = null;
 
-  function upgradeButton(button, label, quote) {
+  function upgradeButton(button, label, quote, showLevels = false) {
     button.disabled = quote.levels === 0;
-    button.textContent = quote.levels ? `${label} (+${quote.levels})` : label;
+    button.textContent = showLevels && quote.levels ? `${label} (+${quote.levels})` : label;
   }
 
   function renderCombat(state) {
@@ -55,16 +57,20 @@
     elements.stageLabel.textContent = `STAGE ${formatNumber(state.stage)}`;
     elements.name.textContent = monster.name;
     elements.kills.textContent = monster.type === "normal" ? `MONSTER ${state.killsInStage} / ${Balance.constants.MONSTERS_PER_STAGE}` : badgeByType[monster.type] || "SPECIAL";
-    elements.hp.textContent = `${formatNumber(monster.hp)} / ${formatNumber(monster.maxHp)}`;
+    elements.hp.textContent = monster.type === "nazar" ? "??? / ???" : `${formatNumber(monster.hp)} / ${formatNumber(monster.maxHp)}`;
     elements.hpFill.style.width = `${hpPercent}%`;
     elements.encounterBadge.hidden = !badgeByType[monster.type];
     elements.encounterBadge.textContent = badgeByType[monster.type] || "";
     elements.bossTimerWrap.hidden = !monster.isTimed;
+    elements.giveUpBoss.hidden = !monster.isTimed;
     elements.bossTimerValue.textContent = ((state.boss.timeRemainingMs || 0) / 1000).toFixed(1);
     elements.farmingBanner.hidden = !state.progression.farmingBeforeBoss;
     elements.farmingStage.textContent = `FARMING STAGE ${state.stage}`;
     elements.nextBossHp.textContent = `NEXT BOSS HP: ${formatNumber(Balance.monsterMaxHp(state.progression.pendingBossStage || state.stage + 1))}`;
     elements.attackArea.classList.toggle("farming", state.progression.farmingBeforeBoss);
+    const nazarEligible = game.isNazarEligible();
+    elements.nazarIndicator.hidden = !state.progression.farmingBeforeBoss;
+    elements.nazarIndicator.classList.toggle("active", nazarEligible);
     ["normal", "guardian", "regionBoss", "mimic", "nazar"].forEach((type) => elements.monsterButton.classList.toggle(`type-${type}`, monster.type === type));
     elements.tapStat.textContent = formatNumber(game.getTotalTap());
     elements.dpsStat.textContent = formatNumber(game.getTotalDps());
@@ -75,9 +81,9 @@
     elements.lutieLevel.textContent = `LV. ${formatNumber(state.lutie.level)}`;
     elements.lutieTap.textContent = formatNumber(game.getTotalTap());
     elements.lutieCost.textContent = formatNumber(Balance.lutieUpgradeCost(state.lutie.level));
-    upgradeButton(elements.lutieUpgrade, "x1", quotes[0]);
-    upgradeButton(elements.lutieUpgrade10, "x10", quotes[1]);
-    upgradeButton(elements.lutieUpgradeMax, "MAX", quotes[2]);
+    upgradeButton(elements.lutieUpgrade, "+1", quotes[0]);
+    upgradeButton(elements.lutieUpgrade10, "+10", quotes[1]);
+    upgradeButton(elements.lutieUpgradeMax, "MAX", quotes[2], true);
     const cooldownMs = Math.max(0, state.skills.flareRayReadyAt - Date.now());
     elements.skillGrid.innerHTML = GameData.ACTIVE_SKILL_DEFINITIONS.map((skill) => {
       const unlocked = state.lutie.level >= skill.requiredLevel;
@@ -89,14 +95,16 @@
 
   function renderGuardians(state) {
     elements.guardianTotalDps.textContent = formatNumber(game.getTotalGuardianDps());
-    elements.guardianList.innerHTML = state.guardians.map((guardian) => {
+    elements.guardianSort.value = state.settings.guardianSort;
+    const guardianView = GameData.sortGuardianView(state.guardians, state.settings.guardianSort);
+    elements.guardianList.innerHTML = guardianView.map((guardian) => {
       if (!guardian.discovered) return `<article class="roster-card locked"><h3>???</h3><p>Not discovered</p></article>`;
       const dps = game.getGuardianFinalDps(guardian.id);
       const stone = state.manaStones.find((item) => item.id === guardian.equippedManaStoneId);
-      if (!guardian.activeThisRun) return `<article class="roster-card locked"><div class="roster-card-head"><div><h3>${escapeHtml(guardian.name)}</h3><p>Discovered · Awaiting this run</p></div><span class="reinc-chip">R${guardian.reincarnationLevel}</span></div></article>`;
+      if (!guardian.activeThisRun) return `<article class="roster-card locked"><div class="roster-card-head"><div><h3>${escapeHtml(guardian.name)}</h3><span class="group-label">${guardian.group}</span><p>Discovered · Awaiting this run</p></div><span class="reinc-chip">R${guardian.reincarnationLevel}</span></div></article>`;
       const quotes = [1, 10, "max"].map((amount) => game.getUpgradeQuote("guardian", amount, guardian.id));
-      const labels = ["x1", "x10", "MAX"].map((label, index) => quotes[index].levels ? `${label} (+${quotes[index].levels})` : label);
-      return `<article class="roster-card"><div class="roster-card-head"><div><h3>${escapeHtml(guardian.name)}</h3><p>Lv. ${formatNumber(guardian.level)} · DPS ${formatNumber(dps)}</p></div><span class="reinc-chip">REINC. ${guardian.reincarnationLevel}</span></div><div class="roster-stats"><span>STONE <b>${stone ? `Lv.${stone.level} ${stone.rarity}` : "NONE"}</b></span><span>NEXT <b>${formatNumber(Balance.guardianUpgradeCost(guardian.level, guardian.unlockOrder))}</b></span></div><div class="purchase-row">${[1, 10, "max"].map((amount, index) => `<button class="purchase-button" data-guardian-upgrade="${guardian.id}" data-amount="${amount}" ${quotes[index].levels ? "" : "disabled"}>${labels[index]}</button>`).join("")}</div></article>`;
+      const labels = ["+1", "+10", quotes[2].levels ? `MAX (+${quotes[2].levels})` : "MAX"];
+      return `<article class="roster-card"><div class="roster-card-head"><div><h3>${escapeHtml(guardian.name)}</h3><span class="group-label">${guardian.group}</span><p>Lv. ${formatNumber(guardian.level)} · DPS ${formatNumber(dps)}</p></div><span class="reinc-chip">REINC. ${guardian.reincarnationLevel}</span></div><div class="roster-stats"><span>STONE <b>${stone ? `Lv.${stone.level} ${stone.rarity}` : "NONE"}</b></span><span>NEXT <b>${formatNumber(Balance.guardianUpgradeCost(guardian.level, guardian.unlockOrder))}</b></span></div><div class="purchase-row">${[1, 10, "max"].map((amount, index) => `<button class="purchase-button" data-guardian-upgrade="${guardian.id}" data-amount="${amount}" ${quotes[index].levels ? "" : "disabled"}>${labels[index]}</button>`).join("")}</div></article>`;
     }).join("");
   }
 
@@ -188,6 +196,14 @@
     acquisitionTimer = setTimeout(() => { elements.acquisitionOverlay.hidden = true; }, 1800);
   }
 
+  function showStoneAcquisition(stone) {
+    clearTimeout(acquisitionTimer);
+    elements.stoneAcquisitionName.textContent = `Lv${stone.level} ${stone.rarity}`;
+    elements.stoneAcquisitionPower.textContent = `Power +${(stone.power * 100).toFixed(1)}%/Lv`;
+    elements.stoneAcquisitionOverlay.hidden = false;
+    acquisitionTimer = setTimeout(() => { elements.stoneAcquisitionOverlay.hidden = true; }, 1800);
+  }
+
   game.subscribe((state, event) => {
     if (event.type === "bossTimer") {
       elements.bossTimerValue.textContent = (state.boss.timeRemainingMs / 1000).toFixed(1);
@@ -203,7 +219,7 @@
       replayMonsterAnimation(event.defeated ? "defeated" : isAuto ? "hit-soft" : "hit-strong", state);
     }
     if (event.type === "guardianAcquired") showAcquisition(event.guardian, event.dps);
-    if (event.type === "manaStoneDropped") showToast(`${event.stone.rarity} Mana Stone acquired`);
+    if (event.type === "manaStoneDropped") showStoneAcquisition(event.stone);
     if (event.type === "saved") showToast("Save complete");
     if (event.type === "imported") showToast("Save imported");
     if (event.type === "reincarnated") showToast(`Reincarnated · +${event.starsEarned} Stars`);
@@ -215,6 +231,7 @@
     performAttack({ x: event.clientX - rect.left, y: event.clientY - rect.top });
   });
   elements.challengeBoss.addEventListener("click", (event) => { event.stopPropagation(); game.challengeBoss(); });
+  elements.giveUpBoss.addEventListener("click", (event) => { event.stopPropagation(); game.giveUpBoss(); });
   elements.lutieUpgrade.addEventListener("click", () => game.upgradeLutie());
   elements.lutieUpgrade10.addEventListener("click", () => game.upgradeLutie(10));
   elements.lutieUpgradeMax.addEventListener("click", () => game.upgradeLutie("max"));
@@ -226,6 +243,7 @@
     const raw = button.dataset.amount;
     game.upgradeGuardian(button.dataset.guardianUpgrade, raw === "max" ? "max" : Number(raw));
   });
+  elements.guardianSort.addEventListener("change", () => game.setSetting("guardianSort", elements.guardianSort.value));
   elements.stoneList.addEventListener("click", (event) => {
     const equip = event.target.closest("[data-stone-equip]");
     const unequip = event.target.closest("[data-stone-unequip]");

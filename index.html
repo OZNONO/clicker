@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17122a">
-  <title>Lutie-like RPG Clicker v0.2</title>
+  <title>Lutie-like RPG Clicker v0.2.1</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <main class="game-shell">
     <header class="top-bar">
-      <div class="brand"><span class="brand-mark">L</span><span>LUTIE<br><small>CLICKER v0.2</small></span></div>
+      <div class="brand"><span class="brand-mark">L</span><span>LUTIE<br><small>CLICKER v0.2.1</small></span></div>
       <div class="resource"><span>STAGE</span><strong id="stageValue">1</strong></div>
       <div class="resource gold"><span>GOLD</span><strong id="goldValue">0</strong></div>
     </header>
@@ -25,8 +25,10 @@
       <div class="hp-wrap">
         <div class="hp-copy"><span>HP</span><strong id="hpValue">10 / 10</strong></div>
         <div class="hp-track"><div class="hp-fill" id="hpFill"></div></div>
+        <div class="nazar-indicator" id="nazarIndicator" hidden><i></i><span>NAZAR</span></div>
       </div>
       <div class="boss-timer" id="bossTimerWrap" hidden><span>TIME</span><strong id="bossTimerValue">30.0</strong></div>
+      <button class="give-up-button" id="giveUpBoss" data-no-attack hidden>GIVE UP</button>
       <div class="farming-banner" id="farmingBanner" data-no-attack hidden>
         <div><strong>BOSS FAILED</strong><span id="farmingStage">FARMING STAGE 9</span><small id="nextBossHp">NEXT BOSS HP: 0</small></div>
         <button id="challengeBoss" data-no-attack>CHALLENGE BOSS</button>
@@ -53,8 +55,8 @@
           <div><span>NEXT COST</span><strong class="coin-value" id="lutieCost">10</strong></div>
         </div>
         <div class="purchase-row">
-          <button class="purchase-button" id="lutieUpgrade">x1</button>
-          <button class="purchase-button" id="lutieUpgrade10">x10</button>
+          <button class="purchase-button" id="lutieUpgrade">+1</button>
+          <button class="purchase-button" id="lutieUpgrade10">+10</button>
           <button class="purchase-button" id="lutieUpgradeMax">MAX</button>
         </div>
         <div class="subsection-heading"><span>ACTIVE SKILLS</span><small>Temporary reconstruction</small></div>
@@ -63,6 +65,7 @@
 
       <section class="tab-panel" id="tab-guardian" data-panel="guardian" hidden>
         <div class="section-title"><div><small>ROSTER</small><h2>Guardians</h2></div><div class="total-chip"><span>TOTAL DPS</span><strong id="guardianTotalDps">0</strong></div></div>
+        <label class="roster-sort"><span>SORT</span><select id="guardianSort"><option value="ACQUIRED">ACQUIRED</option><option value="NAME">NAME</option><option value="GROUP">GROUP</option></select></label>
         <div class="guardian-list" id="guardianList"></div>
       </section>
 
@@ -116,6 +119,7 @@
     <div class="modal-card clear-card"><span class="modal-kicker">MILESTONE REACHED</span><div class="clear-emblem">10</div><h2>v0.1 Clear!</h2><p>You defeated the Stage 10 Region Boss.<br>The reconstruction continues.</p><div><button class="confirm" id="continueButton">CONTINUE</button></div></div>
   </div>
   <div class="acquisition-overlay" id="acquisitionOverlay" hidden><small>NEW GUARDIAN</small><strong id="acquisitionName">Guardian 01</strong><span id="acquisitionDps">DPS +2</span></div>
+  <div class="acquisition-overlay stone-acquisition" id="stoneAcquisitionOverlay" hidden><small>MANA STONE ACQUIRED</small><strong id="stoneAcquisitionName">Lv10 NORMAL</strong><span id="stoneAcquisitionPower">Power +0.5%/Lv</span></div>
   <div class="toast" id="toast" hidden></div>
 
   <script src="balance.js"></script>

@@ -11,6 +11,7 @@ const uiIds = [...uiSource.matchAll(/\$\("([^"]+)"\)/g)].map((match) => match[1]
 assert.deepEqual(uiIds.filter((id) => !htmlIds.has(id)), [], "Every UI binding resolves to index.html");
 assert.equal((html.match(/data-tab="/g) || []).length, 5, "Five bottom navigation buttons are present");
 assert.equal((html.match(/data-panel="/g) || []).length, 5, "Five persistent-content tab panels are present");
+assert.match(uiSource, /monster\.type === "nazar" \? "\?\?\? \/ \?\?\?"/, "Nazar HP is hidden in the UI");
 
 const context = vm.createContext({ console, Date, JSON, Math, Map, Set, setInterval, clearInterval });
 context.window = context;
@@ -74,6 +75,7 @@ state = game.getState();
 const firstGuardian = state.guardians.find((guardian) => guardian.id === encounteredGuardianId);
 assert.equal(firstGuardian.activeThisRun, true, "5. Defeated Guardian joins the active roster");
 assert.equal(firstGuardian.discovered, true);
+assert.equal(firstGuardian.acquisitionOrder, 1);
 
 const twoGuardianState = JSON.parse(game.exportSave());
 const secondGuardian = twoGuardianState.guardians.find((guardian) => guardian.id !== firstGuardian.id);
@@ -84,6 +86,13 @@ assert.equal(game.importSave(JSON.stringify(twoGuardianState)).ok, true);
 const expectedGuardianDps = game.getGuardianFinalDps(firstGuardian.id) + game.getGuardianFinalDps(secondGuardian.id);
 assert.equal(game.getTotalGuardianDps(), expectedGuardianDps, "6. Multiple Guardian DPS values are summed");
 assert.equal(game.getTotalDps(), 1 + expectedGuardianDps);
+const acquiredView = context.GameData.sortGuardianView(game.getState().guardians, "ACQUIRED");
+assert.ok(acquiredView.slice(0, 2).every((guardian) => guardian.discovered), "Acquired Guardians render before undiscovered slots");
+assert.deepEqual(acquiredView.slice(0, 2).map((guardian) => guardian.acquisitionOrder), [1, 2], "ACQUIRED sort uses stable acquisition order");
+const nameView = context.GameData.sortGuardianView(game.getState().guardians, "NAME");
+assert.deepEqual(nameView.slice(0, 2).map((guardian) => guardian.name), nameView.slice(0, 2).map((guardian) => guardian.name).sort(), "NAME sort orders acquired Guardians by name");
+const groupView = context.GameData.sortGuardianView(game.getState().guardians, "GROUP");
+assert.deepEqual(groupView.slice(0, 2).map((guardian) => guardian.group), groupView.slice(0, 2).map((guardian) => guardian.group).sort(), "GROUP sort orders acquired Guardians by group");
 
 // 7-10 and 29-30: Region Boss, timeout, farming, retry, persistence.
 reachStage(game, 10);
@@ -105,12 +114,29 @@ assert.equal(state.stage, 10);
 assert.equal(state.monster.type, "regionBoss");
 assert.equal(state.monster.hp, context.Balance.monsterMaxHp(10));
 assert.equal(state.boss.timeRemainingMs, 30000);
+const stonesBeforeBoss = state.manaStones.length;
+defeatCurrent(restored);
+state = restored.getState();
+assert.equal(state.manaStones.length, stonesBeforeBoss + 1, "Region Boss always grants one Mana Stone");
+assert.equal(state.manaStones.at(-1).level, 10, "Region Boss Stone level matches Boss Stage");
+assert.equal(state.manaStones.at(-1).rarity, "NORMAL", "Region Boss gives NORMAL unless the HIGH roll succeeds");
+
+reachStage(restored, 15);
+assert.equal(restored.getState().monster.type, "guardian");
+assert.equal(restored.giveUpBoss(), true, "GIVE UP immediately exits a timed encounter");
+assert.equal(restored.getState().stage, 14);
+assert.equal(restored.getState().progression.farmingBeforeBoss, true);
+for (let index = 0; index < 12; index += 1) defeatCurrent(restored);
+assert.equal(restored.getState().stage, 14, "Farming never re-enters the encounter automatically");
+assert.equal(restored.challengeBoss(), true);
+assert.equal(restored.getState().stage, 15, "CHALLENGE BOSS retries after GIVE UP");
 
 // 11-14: Mimic, stone creation, equip, cap.
 const mimicAdapter = new MemoryAdapter();
 const mimicGame = createStartedGame(mimicAdapter, { random: () => 0, now: () => clock });
 defeatCurrent(mimicGame);
 assert.equal(mimicGame.getState().monster.type, "mimic", "11. Mimic spawn roll is deterministic");
+assert.notEqual(mimicGame.getState().monster.type, "nazar", "Normal progression never spawns Nazar");
 defeatCurrent(mimicGame);
 const generatedStone = mimicGame.getState().manaStones[0];
 assert.ok(generatedStone, "12. Mimic can generate a Mana Stone");
@@ -143,13 +169,16 @@ nazarSeed.monster = { type: "normal", name: "Mossling", isBoss: false, isTimed: 
 nazarSeed.guardians.forEach((guardian, index) => { if (index < 2) { guardian.discovered = true; guardian.activeThisRun = true; guardian.unlocked = true; guardian.level = 20; } });
 const nazarRolls = [0.99, 0, 0];
 const nazarGame = createStartedGame(new MemoryAdapter(nazarSeed), { random: () => nazarRolls.length ? nazarRolls.shift() : 0, now: () => clock });
-assert.ok(nazarGame.getTotalDps() >= context.Balance.monsterBaseHp(9) * context.Balance.constants.NAZAR_DPS_THRESHOLD, "15. Nazar DPS condition is met");
+assert.equal(nazarGame.isNazarEligible(), true, "15. Nazar indicator condition is calculated from farming DPS");
 defeatCurrent(nazarGame);
 assert.equal(nazarGame.getState().monster.type, "nazar", "15. Eligible farming spawn can become Nazar");
 const firstNazarHp = nazarGame.getState().monster.maxHp;
 defeatCurrent(nazarGame);
 assert.equal(nazarGame.getState().monster.type, "nazar");
 assert.equal(nazarGame.getState().monster.maxHp, firstNazarHp * 2, "16. Repeated Nazar HP escalates x2");
+defeatCurrent(nazarGame);
+assert.equal(nazarGame.getState().monster.maxHp, firstNazarHp * 4, "16. Nazar HP sequence continues 2x → 4x → 8x");
+assert.equal(context.Balance.constants.MIMIC_CHANCE, 0.01, "Mimic chance is tuned to 1%");
 
 // 17-27: reincarnation, permanence, and calculation bonuses.
 const permanentSeed = JSON.parse(game.exportSave());
@@ -216,13 +245,28 @@ const maxQuote = upgradeGame.getUpgradeQuote("lutie", "max");
 assert.equal(upgradeGame.upgradeLutie("max"), true);
 assert.equal(upgradeGame.getState().gold, beforeMaxGold - maxQuote.totalCost);
 assert.ok(upgradeGame.getState().gold >= 0, "28. MAX never overspends");
+const sevenLevelGold = Array.from({ length: 7 }, (_, index) => context.Balance.lutieUpgradeCost(index + 1)).reduce((sum, cost) => sum + cost, 0);
+const insufficientSeed = JSON.parse(bonusGame.exportSave());
+insufficientSeed.gold = sevenLevelGold;
+insufficientSeed.lutie.level = 1;
+const insufficientGame = createStartedGame(new MemoryAdapter(insufficientSeed));
+assert.deepEqual(clone(insufficientGame.getUpgradeQuote("lutie", 10)), { levels: 0, totalCost: 0 }, "+10 is disabled when all ten levels are unaffordable");
+assert.equal(insufficientGame.upgradeLutie(10), false);
+assert.equal(insufficientGame.getState().lutie.level, 1, "+10 never performs a partial purchase");
+const guardianBulkSeed = JSON.parse(bonusGame.exportSave());
+const bulkGuardian = guardianBulkSeed.guardians.find((guardian) => guardian.activeThisRun);
+bulkGuardian.level = 1;
+guardianBulkSeed.gold = Array.from({ length: 10 }, (_, index) => context.Balance.guardianUpgradeCost(index + 1, bulkGuardian.unlockOrder)).reduce((sum, cost) => sum + cost, 0);
+const guardianBulkGame = createStartedGame(new MemoryAdapter(guardianBulkSeed));
+assert.equal(guardianBulkGame.upgradeGuardian(bulkGuardian.id, 10), true, "Guardian +10 purchases exactly ten levels");
+assert.equal(guardianBulkGame.getState().guardians.find((guardian) => guardian.id === bulkGuardian.id).level, 11);
 
 // 29: general save/load.
 const upgradeAdapter = new MemoryAdapter(JSON.parse(upgradeGame.exportSave()));
 const saveRoundTrip = createStartedGame(upgradeAdapter);
 assert.equal(saveRoundTrip.getState().lutie.level, upgradeGame.getState().lutie.level, "29. Save/load preserves progression");
 
-// 31: v1 -> v2 migration.
+// 31: v1/v2 -> v3 migration.
 const v1 = {
   saveVersion: 1, updatedAt: "2026-01-01T00:00:00.000Z", gold: 123, stage: 9, killsInStage: 4,
   lutie: { level: 7, tap: 8 }, guardians: [{ id: "ember", level: 3, dps: 7 }],
@@ -231,7 +275,7 @@ const v1 = {
   monster: { name: "Mossling", isBoss: false, hp: 12, maxHp: context.Balance.monsterBaseHp(9) }
 };
 const migrated = createStartedGame(new MemoryAdapter(v1)).getState();
-assert.equal(migrated.saveVersion, 2, "31. v1 save migrates to v2");
+assert.equal(migrated.saveVersion, 3, "31. v1 save migrates to v3");
 assert.equal(migrated.gold, 123);
 assert.equal(migrated.stage, 9);
 assert.equal(migrated.lutie.level, 7);
@@ -239,14 +283,33 @@ assert.equal(migrated.guardians[0].level, 3);
 assert.equal(migrated.guardians[0].activeThisRun, true);
 assert.equal(migrated.progression.farmingBeforeBoss, true);
 assert.equal(migrated.updatedAt.slice(0, 4), "2026", "Migration keeps the previous updatedAt until next save writes a fresh timestamp");
+const v2 = JSON.parse(game.exportSave());
+v2.saveVersion = 2;
+v2.guardians.forEach((guardian) => { delete guardian.acquisitionOrder; });
+v2.guardians[0].discovered = true;
+v2.guardians[0].activeThisRun = true;
+v2.guardians[0].level = 17;
+v2.guardians[0].reincarnationLevel = 3;
+v2.guardians[0].equippedManaStoneId = "v2-stone";
+v2.manaStones = [{ id: "v2-stone", level: 20, rarity: "HIGH", power: context.Balance.constants.MANA_STONE_POWER_HIGH, equippedGuardianId: v2.guardians[0].id }];
+const migratedV2Adapter = new MemoryAdapter(v2);
+const migratedV2Game = createStartedGame(migratedV2Adapter);
+const migratedV2 = migratedV2Game.getState();
+assert.equal(migratedV2.saveVersion, 3, "v0.2 save migrates to v3");
+assert.equal(migratedV2.guardians[0].level, 17);
+assert.equal(migratedV2.guardians[0].reincarnationLevel, 3);
+assert.equal(migratedV2.guardians[0].equippedManaStoneId, "v2-stone");
+assert.equal(migratedV2.guardians[0].acquisitionOrder, 1, "Migration creates deterministic acquisitionOrder");
+const migratedV2Reload = createStartedGame(migratedV2Adapter).getState();
+assert.equal(migratedV2Reload.guardians[0].acquisitionOrder, 1, "acquisitionOrder survives save/load");
 
 // 32-34: export, invalid import, complete reset.
 const exported = upgradeGame.exportSave();
-assert.equal(JSON.parse(exported).saveVersion, 2, "32. Export produces valid JSON");
+assert.equal(JSON.parse(exported).saveVersion, 3, "32. Export produces valid JSON");
 const beforeInvalidImport = upgradeGame.exportSave();
 assert.equal(upgradeGame.importSave("{bad json").ok, false);
 assert.equal(upgradeGame.exportSave(), beforeInvalidImport, "33. Invalid JSON does not damage current state");
-assert.equal(upgradeGame.importSave(JSON.stringify({ saveVersion: 2, gold: "bad" })).ok, false);
+assert.equal(upgradeGame.importSave(JSON.stringify({ saveVersion: 3, gold: "bad" })).ok, false);
 assert.equal(upgradeGame.exportSave(), beforeInvalidImport, "33. Invalid structure does not damage current state");
 upgradeGame.reset();
 state = upgradeGame.getState();
@@ -260,4 +323,4 @@ assert.equal(state.progression.farmingBeforeBoss, false);
 assert.equal(state.run.nazarEscalation, 0);
 assert.equal(upgradeGame.getTotalDps(), 1);
 
-console.log("v0.2 smoke test passed: 34 progression, combat, persistence, migration, and economy checks.");
+console.log("v0.2.1 smoke test passed: boss rewards/GIVE UP, Nazar UX, exact upgrades, sorting, migration, and prior coverage.");

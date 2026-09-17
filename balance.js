@@ -3,7 +3,7 @@
 
   // All unverified values below are temporary reconstruction values.
   const constants = Object.freeze({
-    SAVE_VERSION: 2,
+    SAVE_VERSION: 3,
     MONSTERS_PER_STAGE: 10,
     GUARDIAN_ENCOUNTER_OFFSET: 5,
     REGION_LENGTH: 10,
@@ -23,17 +23,18 @@
     REGION_BOSS_HP_MULTIPLIER: 10,
     GUARDIAN_INITIAL_COST: 25,
     GUARDIAN_COST_ORDER_SCALE: 0.25,
-    GUARDIAN_DPS_GROWTH: 1.10,
+    GUARDIAN_BASE_DPS_SCALE: 0.25,
+    GUARDIAN_DPS_GROWTH: 1.035,
     GUARDIAN_COST_GROWTH: 1.13,
     GUARDIAN_DUPLICATE_GOLD_MULTIPLIER: 10,
     GUARDIAN_REINCARNATION_BONUS: 0.10,
     AUTO_ATTACK_INTERVAL_MS: 1000,
     MAX_UPGRADE_LEVELS_PER_PURCHASE: 100000,
-    MIMIC_CHANCE: 0.03,
+    MIMIC_CHANCE: 0.01,
     MIMIC_HP_MULTIPLIER: 3,
     MIMIC_GOLD_MULTIPLIER: 5,
     MIMIC_MANA_STONE_DROP_CHANCE: 0.35,
-    REGION_BOSS_MANA_STONE_DROP_CHANCE: 0.25,
+    REGION_BOSS_HIGH_STONE_CHANCE: 0.15,
     NAZAR_CHANCE: 0.05,
     NAZAR_DPS_THRESHOLD: 0.50,
     NAZAR_INITIAL_HP_MULTIPLIER: 2,
@@ -72,7 +73,7 @@
       const base = this.monsterBaseHp(stage);
       return this.isBossStage(stage) ? base * this.bossMultiplier(stage) : base;
     },
-    guardianBaseDps: (level, baseDps) => Math.max(1, safeFloor(baseDps * level * Math.pow(constants.GUARDIAN_DPS_GROWTH, level - 1))),
+    guardianBaseDps: (level, baseDps) => Math.max(1, safeFloor(baseDps * constants.GUARDIAN_BASE_DPS_SCALE * level * Math.pow(constants.GUARDIAN_DPS_GROWTH, level - 1))),
     guardianUpgradeCost: (level, unlockOrder = 1) => Math.max(1, safeFloor(constants.GUARDIAN_INITIAL_COST * (1 + (unlockOrder - 1) * constants.GUARDIAN_COST_ORDER_SCALE) * Math.pow(constants.GUARDIAN_COST_GROWTH, level - 1))),
     reincarnationStars: (highestStage) => Math.max(1, safeFloor(highestStage / 10)),
     artifactUpgradeCost: (level) => level + 1,

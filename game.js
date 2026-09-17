@@ -20,7 +20,8 @@
         activeThisRun: false,
         level: 1,
         reincarnationLevel: 0,
-        equippedManaStoneId: null
+        equippedManaStoneId: null,
+        acquisitionOrder: null
       }));
     }
 
@@ -50,9 +51,9 @@
         artifacts: { tap: { level: 0 }, dps: { level: 0 }, gold: { level: 0 } },
         progression: initialProgression(),
         run: { highestStage: 1, encounteredGuardianIds: [], nazarEscalation: 0 },
-        lifetime: { highestStage: 1, totalReincarnations: 0, nextStoneId: 1 },
+        lifetime: { highestStage: 1, totalReincarnations: 0, nextStoneId: 1, nextGuardianAcquisitionOrder: 1 },
         skills: { flareRayReadyAt: 0 },
-        settings: { damageNumbers: true, hitAnimations: true },
+        settings: { damageNumbers: true, hitAnimations: true, guardianSort: "ACQUIRED" },
         boss: { timeRemainingMs: null, deadlineAt: null },
         monster: createMonster("normal", 1)
       };
@@ -108,6 +109,8 @@
         guardian.unlocked = true;
         guardian.activeThisRun = true;
         guardian.level = Math.max(1, validNumber(oldGuardian && oldGuardian.level, 1));
+        guardian.acquisitionOrder = 1;
+        migrated.lifetime.nextGuardianAcquisitionOrder = 2;
       }
 
       migrated.progression.bossRetryAvailable = Boolean(oldProgression.bossRetryAvailable);
@@ -174,6 +177,16 @@
       };
       const savedGuardians = new Map((Array.isArray(saved.guardians) ? saved.guardians : []).map((guardian) => [guardian.id, guardian]));
       next.guardians = base.guardians.map((guardian) => ({ ...guardian, ...(savedGuardians.get(guardian.id) || {}) }));
+      let nextAcquisitionOrder = next.guardians
+        .filter((guardian) => guardian.discovered && Number.isFinite(guardian.acquisitionOrder))
+        .reduce((highest, guardian) => Math.max(highest, guardian.acquisitionOrder), 0) + 1;
+      next.guardians.forEach((guardian) => {
+        if (guardian.discovered && !Number.isFinite(guardian.acquisitionOrder)) {
+          guardian.acquisitionOrder = nextAcquisitionOrder++;
+        }
+      });
+      next.lifetime.nextGuardianAcquisitionOrder = Math.max(validNumber(next.lifetime.nextGuardianAcquisitionOrder, 1), nextAcquisitionOrder);
+      if (!["ACQUIRED", "NAME", "GROUP"].includes(next.settings.guardianSort)) next.settings.guardianSort = "ACQUIRED";
       next.manaStones = Array.isArray(saved.manaStones) ? saved.manaStones.filter(isValidStone).map((stone) => ({ ...stone })) : [];
       next.gold = Math.max(0, validNumber(next.gold, 0));
       next.stage = Math.max(1, validNumber(next.stage, 1));
@@ -198,7 +211,7 @@
       if (!saved || typeof saved !== "object") return initialState();
       try {
         if (saved.saveVersion === 1) return migrateV1(saved);
-        if (saved.saveVersion === Balance.constants.SAVE_VERSION) return normalizeV2(saved);
+        if ([2, Balance.constants.SAVE_VERSION].includes(saved.saveVersion)) return normalizeV2(saved);
       } catch (_error) {
         return initialState();
       }
@@ -211,7 +224,7 @@
 
     function isImportCandidate(candidate) {
       return candidate && typeof candidate === "object"
-        && [1, Balance.constants.SAVE_VERSION].includes(candidate.saveVersion)
+        && [1, 2, Balance.constants.SAVE_VERSION].includes(candidate.saveVersion)
         && Number.isFinite(candidate.gold)
         && Number.isFinite(candidate.stage)
         && candidate.lutie && Number.isFinite(candidate.lutie.level);
@@ -337,8 +350,8 @@
       return "NORMAL";
     }
 
-    function createManaStone() {
-      const rarity = rollStoneRarity();
+    function createManaStone(forcedRarity = null) {
+      const rarity = forcedRarity || rollStoneRarity();
       const stone = {
         id: `stone-${state.lifetime.nextStoneId++}`,
         level: state.stage,
@@ -362,6 +375,9 @@
       guardian.discovered = true;
       guardian.unlocked = true;
       guardian.activeThisRun = true;
+      if (isNew && !Number.isFinite(guardian.acquisitionOrder)) {
+        guardian.acquisitionOrder = state.lifetime.nextGuardianAcquisitionOrder++;
+      }
       if (duplicate) addGold(Balance.duplicateGuardianGold(state.stage));
       return { guardian, isNew, duplicate };
     }
@@ -381,7 +397,8 @@
       let stone = null;
       if (defeatedMonster.type === "guardian") acquisition = recruitGuardian(defeatedMonster.guardianId);
       if (defeatedMonster.type === "regionBoss") {
-        stone = maybeDropManaStone(Balance.constants.REGION_BOSS_MANA_STONE_DROP_CHANCE);
+        const rarity = random() < Balance.constants.REGION_BOSS_HIGH_STONE_CHANCE ? "HIGH" : "NORMAL";
+        stone = createManaStone(rarity);
         if (state.stage === Balance.constants.REGION_LENGTH) {
           state.progression.v01Cleared = true;
           state.progression.clearSeen = false;
@@ -465,6 +482,7 @@
 
     function purchaseQuote(level, gold, costForLevel, requested) {
       const limit = requested === "max" ? Balance.constants.MAX_UPGRADE_LEVELS_PER_PURCHASE : Math.max(1, Math.floor(Number(requested) || 1));
+      const requiresExactAmount = requested !== "max";
       let levels = 0;
       let totalCost = 0;
       while (levels < limit) {
@@ -473,6 +491,7 @@
         totalCost += cost;
         levels += 1;
       }
+      if (requiresExactAmount && levels < limit) return { levels: 0, totalCost: 0 };
       return { levels, totalCost };
     }
 
@@ -543,6 +562,10 @@
       save();
       emit("bossChallenge");
       return true;
+    }
+
+    function giveUpBoss() {
+      return failBoss();
     }
 
     function equipManaStone(stoneId, guardianId) {
@@ -628,7 +651,12 @@
 
     function setSetting(key, value) {
       if (!(key in state.settings)) return false;
-      state.settings[key] = Boolean(value);
+      if (key === "guardianSort") {
+        if (!["ACQUIRED", "NAME", "GROUP"].includes(value)) return false;
+        state.settings[key] = value;
+      } else {
+        state.settings[key] = Boolean(value);
+      }
       save();
       emit("settingChanged", { key, value: state.settings[key] });
       return true;
@@ -716,9 +744,9 @@
     }
 
     return Object.freeze({
-      start, stop, attack, tap: attack, autoAttack, useFlareRay, bossTimerTick, challengeBoss,
+      start, stop, attack, tap: attack, autoAttack, useFlareRay, bossTimerTick, challengeBoss, giveUpBoss,
       upgradeLutie, upgradeGuardian, getUpgradeQuote, getTotalTap, getTotalDps, getTotalGuardianDps,
-      getGuardianFinalDps, getEffectiveStoneLevel, calculateGoldReward, equipManaStone, unequipManaStone,
+      getGuardianFinalDps, getEffectiveStoneLevel, calculateGoldReward, isNazarEligible, equipManaStone, unequipManaStone,
       getReincarnationPreview, reincarnate, upgradeArtifact, setSetting, acknowledgeClear, reset,
       saveNow, exportSave, importSave, getState, subscribe
     });
