@@ -1,4 +1,4 @@
-# Lutie-like RPG Clicker v0.2.2
+# Lutie-like RPG Clicker v0.2.3
 
 A personal reconstruction prototype exploring the overall structure and feel of a discontinued mobile RPG clicker. It uses original CSS placeholder shapes only; no original copyrighted image or audio assets are included.
 
@@ -17,11 +17,11 @@ Double-click `index.html` and play in a modern browser. There is no build step, 
 - Region Bosses at Stages 10, 20, 30, and so on
 - Thirty-second timed encounters, optional **Give Up**, failure farming, and manual boss retry
 - Guaranteed Region Boss Mana Stone rewards (Normal, with a provisional High upgrade chance)
-- Independent Guardian levels, exact +1/+10/MAX upgrades, groups, acquisition-order sorting, and permanent reincarnation levels
+- Independent Guardian levels, exact-cost +1/+10/MAX upgrades, readable Level/DPS values, groups, acquisition-order sorting, and permanent reincarnation levels
 - Mimics with a provisional 1% appearance rate, bonus Gold, and Mana Stone drops
 - Farming-only Nazar indicator and encounters with hidden, exponentially escalating HP; Nazar grants no Gold or drops
 - Normal, High, and Legendary Mana Stones with Stage-based effective-level caps
-- One-stone-per-Guardian equip and unequip rules
+- Touch-friendly Guardian Mana Stone picker with readable rarity/level/effect details and exclusive one-stone-per-Guardian equip rules
 - Lutie active-skill slots; Flare Ray is the single functional prototype skill
 - Reincarnation, Stars, and three placeholder Artifacts for TAP/DPS/Gold
 - Automatic local save, manual Save Now, JSON Export/Import, and complete Reset Save
@@ -41,7 +41,9 @@ resetGame()
 
 JSON Export/Import is supported in the Settings tab. Imports are parsed and structurally validated before replacing the current state; invalid input leaves the active save untouched.
 
-The collapsed Developer Info area includes a minimal **Force Nazar** control. It is available only while farming, does not bypass normal reward or escalation rules, and exists solely for prototype testing.
+Guardian cards are created only when their roster structure changes. Combat ticks and upgrades patch the live Level, DPS, Gold, Mana Stone, and purchase-cost fields in place, preserving Guardian scroll position, button focus, and an open Mana Stone picker while combat continues.
+
+The collapsed Developer Info area includes **Force Nazar** and **+100K Gold** controls. Force Nazar is available only while farming and does not bypass normal reward or escalation rules. The Gold control adds exactly 100,000 through the normal game-state and storage boundary for Guardian UI testing.
 
 ## File responsibilities
 
@@ -61,6 +63,6 @@ Run:
 node tests/smoke.test.cjs
 ```
 
-The smoke suite retains prior coverage and adds deterministic checks for derived-stat rehydration, legacy-field isolation, rewardless Nazar kills, 2x→4x→8x→16x anti-camping escalation, the temporary 10% natural Nazar chance, Force Nazar, and v1/v2/v3→v4 migration.
+The smoke suite retains prior coverage and adds deterministic checks for stable Guardian rendering during combat, Mana Stone equip/unequip and exclusive ownership, exact displayed-versus-spent +1/+10/MAX costs, unaffordable +10 behavior, immediate upgrade events, the +100K Gold test action, derived-stat rehydration, Nazar behavior, and v1/v2/v3→v4 migration.
 
 Nazar appearance rates and all other unverified balance constants remain temporary tuning values rather than verified original values.

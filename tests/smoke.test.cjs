@@ -12,6 +12,13 @@ assert.deepEqual(uiIds.filter((id) => !htmlIds.has(id)), [], "Every UI binding r
 assert.equal((html.match(/data-tab="/g) || []).length, 5, "Five bottom navigation buttons are present");
 assert.equal((html.match(/data-panel="/g) || []).length, 5, "Five persistent-content tab panels are present");
 assert.match(uiSource, /monster\.type === "nazar" \? "\?\?\? \/ \?\?\?"/, "Nazar HP is hidden in the UI");
+assert.match(html, /id="stonePicker"/, "Guardian Mana Stone picker overlay is present");
+assert.doesNotMatch(uiSource, /data-stone-select/, "Legacy Mana Stone dropdown rendering is removed");
+assert.match(uiSource, /data-upgrade-cost/, "Guardian upgrade controls render their shared quote cost");
+assert.match(uiSource, /render\(state, event\)/, "Subscriber passes event context into incremental rendering");
+const guardianRebuildSource = uiSource.match(/const rebuildGuardians = ([\s\S]*?);\n    if \(rebuildGuardians\)/)[1];
+assert.doesNotMatch(guardianRebuildSource, /autoAttack|tap|skillAttack/, "Combat events never rebuild Guardian card DOM");
+assert.match(uiSource, /if \(openStonePickerGuardianId && \[/, "Open picker state is preserved and selectively refreshed");
 
 const context = vm.createContext({ console, Date, JSON, Math, Map, Set, setInterval, clearInterval });
 context.window = context;
@@ -149,13 +156,23 @@ equipmentState.progression.bossRetryAvailable = false;
 equipmentState.progression.pendingBossStage = null;
 equipmentState.progression.pendingEncounterType = null;
 equipmentState.monster = { type: "normal", name: "Cave Puff", isBoss: false, isTimed: false, guardianId: null, hp: 20, maxHp: 20 };
-equipmentState.manaStones = [{ ...generatedStone, id: "stone-cap-test", level: 100, equippedGuardianId: null }];
+equipmentState.manaStones = [
+  { ...generatedStone, id: "stone-cap-test", level: 100, equippedGuardianId: null },
+  { ...generatedStone, id: "stone-exclusive-test", level: 3, rarity: "HIGH", equippedGuardianId: null }
+];
 assert.equal(game.importSave(JSON.stringify(equipmentState)).ok, true);
 assert.equal(game.equipManaStone("stone-cap-test", firstGuardian.id), true, "13. Mana Stone equips to a Guardian");
 assert.equal(game.getState().guardians.find((guardian) => guardian.id === firstGuardian.id).equippedManaStoneId, "stone-cap-test");
 assert.equal(game.getEffectiveStoneLevel(game.getState().manaStones[0]), 6, "14. Stone effective level is capped by Stage");
 assert.equal(game.unequipManaStone("stone-cap-test"), true, "13. Mana Stone unequips");
 assert.equal(game.getState().manaStones[0].equippedGuardianId, null);
+assert.equal(game.equipManaStone("stone-cap-test", firstGuardian.id), true);
+assert.equal(game.equipManaStone("stone-cap-test", secondGuardian.id), true, "Equipping a Stone to another Guardian moves it");
+assert.equal(game.getState().guardians.find((guardian) => guardian.id === firstGuardian.id).equippedManaStoneId, null);
+assert.equal(game.getState().guardians.find((guardian) => guardian.id === secondGuardian.id).equippedManaStoneId, "stone-cap-test");
+assert.equal(game.equipManaStone("stone-exclusive-test", secondGuardian.id), true, "A Guardian accepts only one Stone");
+assert.equal(game.getState().manaStones.find((stone) => stone.id === "stone-cap-test").equippedGuardianId, null);
+assert.equal(game.getState().manaStones.find((stone) => stone.id === "stone-exclusive-test").equippedGuardianId, secondGuardian.id);
 
 // 15-16: Nazar eligibility and escalating HP.
 const nazarSeed = JSON.parse(game.exportSave());
@@ -282,16 +299,52 @@ const insufficientSeed = JSON.parse(bonusGame.exportSave());
 insufficientSeed.gold = sevenLevelGold;
 insufficientSeed.lutie.level = 1;
 const insufficientGame = createStartedGame(new MemoryAdapter(insufficientSeed));
-assert.deepEqual(clone(insufficientGame.getUpgradeQuote("lutie", 10)), { levels: 0, totalCost: 0 }, "+10 is disabled when all ten levels are unaffordable");
+assert.deepEqual(clone(insufficientGame.getUpgradeQuote("lutie", 10)), { levels: 0, totalCost: exactTenCost }, "+10 displays its exact cost but is disabled when all ten levels are unaffordable");
 assert.equal(insufficientGame.upgradeLutie(10), false);
 assert.equal(insufficientGame.getState().lutie.level, 1, "+10 never performs a partial purchase");
 const guardianBulkSeed = JSON.parse(bonusGame.exportSave());
 const bulkGuardian = guardianBulkSeed.guardians.find((guardian) => guardian.activeThisRun);
 bulkGuardian.level = 1;
-guardianBulkSeed.gold = Array.from({ length: 10 }, (_, index) => context.Balance.guardianUpgradeCost(index + 1, bulkGuardian.unlockOrder)).reduce((sum, cost) => sum + cost, 0);
+const guardianTenCost = Array.from({ length: 10 }, (_, index) => context.Balance.guardianUpgradeCost(index + 1, bulkGuardian.unlockOrder)).reduce((sum, cost) => sum + cost, 0);
+guardianBulkSeed.gold = 1_000_000;
 const guardianBulkGame = createStartedGame(new MemoryAdapter(guardianBulkSeed));
+const guardianOneQuote = guardianBulkGame.getUpgradeQuote("guardian", 1, bulkGuardian.id);
+const goldBeforeGuardianOne = guardianBulkGame.getState().gold;
+assert.equal(guardianBulkGame.upgradeGuardian(bulkGuardian.id, 1), true);
+assert.equal(goldBeforeGuardianOne - guardianBulkGame.getState().gold, guardianOneQuote.totalCost, "Guardian +1 displayed cost matches Gold spent");
+const guardianTenQuote = guardianBulkGame.getUpgradeQuote("guardian", 10, bulkGuardian.id);
+const expectedGuardianTenFromLevelTwo = Array.from({ length: 10 }, (_, index) => context.Balance.guardianUpgradeCost(index + 2, bulkGuardian.unlockOrder)).reduce((sum, cost) => sum + cost, 0);
+assert.equal(guardianTenQuote.totalCost, expectedGuardianTenFromLevelTwo);
+const goldBeforeGuardianTen = guardianBulkGame.getState().gold;
 assert.equal(guardianBulkGame.upgradeGuardian(bulkGuardian.id, 10), true, "Guardian +10 purchases exactly ten levels");
-assert.equal(guardianBulkGame.getState().guardians.find((guardian) => guardian.id === bulkGuardian.id).level, 11);
+assert.equal(guardianBulkGame.getState().guardians.find((guardian) => guardian.id === bulkGuardian.id).level, 12);
+assert.equal(goldBeforeGuardianTen - guardianBulkGame.getState().gold, guardianTenQuote.totalCost, "Guardian +10 displayed cumulative cost matches Gold spent");
+const guardianMaxQuote = guardianBulkGame.getUpgradeQuote("guardian", "max", bulkGuardian.id);
+const levelBeforeGuardianMax = guardianBulkGame.getState().guardians.find((guardian) => guardian.id === bulkGuardian.id).level;
+const goldBeforeGuardianMax = guardianBulkGame.getState().gold;
+const dpsBeforeGuardianMax = guardianBulkGame.getGuardianFinalDps(bulkGuardian.id);
+let upgradeEvent = null;
+guardianBulkGame.subscribe((snapshot, event) => { if (event.type === "upgradeGuardian") upgradeEvent = { snapshot, event }; });
+assert.equal(guardianBulkGame.upgradeGuardian(bulkGuardian.id, "max"), true);
+const guardianAfterMax = guardianBulkGame.getState().guardians.find((guardian) => guardian.id === bulkGuardian.id);
+assert.equal(guardianAfterMax.level - levelBeforeGuardianMax, guardianMaxQuote.levels, "Guardian MAX displayed level count matches purchased levels");
+assert.equal(goldBeforeGuardianMax - guardianBulkGame.getState().gold, guardianMaxQuote.totalCost, "Guardian MAX displayed cost matches Gold spent");
+assert.ok(guardianBulkGame.getGuardianFinalDps(bulkGuardian.id) > dpsBeforeGuardianMax, "Guardian DPS is recalculated immediately after upgrade");
+assert.equal(guardianBulkGame.getUpgradeQuote("guardian", 1, bulkGuardian.id).totalCost, context.Balance.guardianUpgradeCost(guardianAfterMax.level, bulkGuardian.unlockOrder), "Next displayed cost is refreshed from the upgraded level");
+assert.equal(upgradeEvent.snapshot.guardians.find((guardian) => guardian.id === bulkGuardian.id).level, guardianAfterMax.level, "Upgrade event immediately exposes the updated Guardian level");
+assert.equal(upgradeEvent.event.totalCost, guardianMaxQuote.totalCost);
+
+const guardianInsufficientSeed = JSON.parse(bonusGame.exportSave());
+const insufficientGuardian = guardianInsufficientSeed.guardians.find((guardian) => guardian.activeThisRun);
+insufficientGuardian.level = 1;
+guardianInsufficientSeed.gold = guardianTenCost - 1;
+const guardianInsufficientGame = createStartedGame(new MemoryAdapter(guardianInsufficientSeed));
+assert.deepEqual(clone(guardianInsufficientGame.getUpgradeQuote("guardian", 10, insufficientGuardian.id)), { levels: 0, totalCost: guardianTenCost }, "Guardian +10 keeps the exact cumulative display cost when disabled");
+assert.equal(guardianInsufficientGame.upgradeGuardian(insufficientGuardian.id, 10), false);
+
+const developerGoldBefore = guardianInsufficientGame.getState().gold;
+assert.equal(guardianInsufficientGame.addDeveloperGold(), true);
+assert.equal(guardianInsufficientGame.getState().gold, developerGoldBefore + 100000, "+100K GOLD adds exactly 100,000 and uses normal state persistence");
 
 // 29: general save/load.
 const upgradeAdapter = new MemoryAdapter(JSON.parse(upgradeGame.exportSave()));
@@ -386,4 +439,4 @@ assert.equal(state.progression.farmingBeforeBoss, false);
 assert.equal(state.run.nazarEscalation, 0);
 assert.equal(upgradeGame.getTotalDps(), 1);
 
-console.log("v0.2.2 smoke test passed: derived-state rehydration, rewardless Nazar escalation, FORCE NAZAR, migration, and prior coverage.");
+console.log("v0.2.3 smoke test passed: stable Guardian UI contract, exact upgrade quotes, exclusive Mana Stones, developer Gold, and prior coverage.");

@@ -541,16 +541,23 @@
 
     function purchaseQuote(level, gold, costForLevel, requested) {
       const limit = requested === "max" ? Balance.constants.MAX_UPGRADE_LEVELS_PER_PURCHASE : Math.max(1, Math.floor(Number(requested) || 1));
-      const requiresExactAmount = requested !== "max";
       let levels = 0;
       let totalCost = 0;
+      if (requested !== "max") {
+        while (levels < limit) {
+          const cost = costForLevel(level + levels);
+          if (!Number.isFinite(cost) || cost < 1) return { levels: 0, totalCost: 0 };
+          totalCost += cost;
+          levels += 1;
+        }
+        return { levels: totalCost <= gold ? levels : 0, totalCost };
+      }
       while (levels < limit) {
         const cost = costForLevel(level + levels);
         if (!Number.isFinite(cost) || cost < 1 || totalCost + cost > gold) break;
         totalCost += cost;
         levels += 1;
       }
-      if (requiresExactAmount && levels < limit) return { levels: 0, totalCost: 0 };
       return { levels, totalCost };
     }
 
@@ -632,6 +639,13 @@
       spawnNazar();
       save();
       emit("nazarForced");
+      return true;
+    }
+
+    function addDeveloperGold() {
+      state.gold += 100000;
+      save();
+      emit("developerGoldAdded", { amount: 100000 });
       return true;
     }
 
@@ -811,7 +825,7 @@
     }
 
     return Object.freeze({
-      start, stop, attack, tap: attack, autoAttack, useFlareRay, bossTimerTick, challengeBoss, giveUpBoss, forceNazar,
+      start, stop, attack, tap: attack, autoAttack, useFlareRay, bossTimerTick, challengeBoss, giveUpBoss, forceNazar, addDeveloperGold,
       upgradeLutie, upgradeGuardian, getUpgradeQuote, getTotalTap, getTotalDps, getTotalGuardianDps,
       getGuardianFinalDps, getEffectiveStoneLevel, calculateGoldReward, isNazarEligible, equipManaStone, unequipManaStone,
       getReincarnationPreview, reincarnate, upgradeArtifact, setSetting, acknowledgeClear, reset,

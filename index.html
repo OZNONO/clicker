@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17122a">
-  <title>Lutie-like RPG Clicker v0.2.2</title>
+  <title>Lutie-like RPG Clicker v0.2.3</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <main class="game-shell">
     <header class="top-bar">
-      <div class="brand"><span class="brand-mark">L</span><span>LUTIE<br><small>CLICKER v0.2.2</small></span></div>
+      <div class="brand"><span class="brand-mark">L</span><span>LUTIE<br><small>CLICKER v0.2.3</small></span></div>
       <div class="resource"><span>STAGE</span><strong id="stageValue">1</strong></div>
       <div class="resource gold"><span>GOLD</span><strong id="goldValue">0</strong></div>
     </header>
@@ -64,7 +64,7 @@
       </section>
 
       <section class="tab-panel" id="tab-guardian" data-panel="guardian" hidden>
-        <div class="section-title"><div><small>ROSTER</small><h2>Guardians</h2></div><div class="total-chip"><span>TOTAL DPS</span><strong id="guardianTotalDps">0</strong></div></div>
+        <div class="section-title"><div><small>ROSTER</small><h2>Guardians</h2></div><div class="guardian-resources"><div class="total-chip gold-chip"><span>CURRENT GOLD</span><strong id="guardianGold">0</strong></div><div class="total-chip"><span>TOTAL DPS</span><strong id="guardianTotalDps">0</strong></div></div></div>
         <label class="roster-sort"><span>SORT</span><select id="guardianSort"><option value="ACQUIRED">ACQUIRED</option><option value="NAME">NAME</option><option value="GROUP">GROUP</option></select></label>
         <div class="guardian-list" id="guardianList"></div>
       </section>
@@ -101,6 +101,7 @@
           <dl id="developerInfo"></dl>
           <button class="developer-action" id="forceNazar" disabled>FORCE NAZAR</button>
           <small id="forceNazarHint">Available while farming</small>
+          <button class="developer-action gold-action" id="addDeveloperGold">+100K GOLD</button>
         </details>
       </section>
     </section>
@@ -119,6 +120,14 @@
   </div>
   <div class="modal-overlay" id="clearOverlay" hidden>
     <div class="modal-card clear-card"><span class="modal-kicker">MILESTONE REACHED</span><div class="clear-emblem">10</div><h2>v0.1 Clear!</h2><p>You defeated the Stage 10 Region Boss.<br>The reconstruction continues.</p><div><button class="confirm" id="continueButton">CONTINUE</button></div></div>
+  </div>
+  <div class="modal-overlay stone-picker-overlay" id="stonePicker" hidden role="dialog" aria-modal="true" aria-labelledby="stonePickerTitle">
+    <div class="modal-card stone-picker-card">
+      <span class="modal-kicker">SELECT MANA STONE</span>
+      <h2 id="stonePickerTitle">Guardian</h2>
+      <div class="stone-picker-list" id="stonePickerList"></div>
+      <div><button id="closeStonePicker">CLOSE</button></div>
+    </div>
   </div>
   <div class="acquisition-overlay" id="acquisitionOverlay" hidden><small>NEW GUARDIAN</small><strong id="acquisitionName">Guardian 01</strong><span id="acquisitionDps">DPS +2</span></div>
   <div class="acquisition-overlay stone-acquisition" id="stoneAcquisitionOverlay" hidden><small>MANA STONE ACQUIRED</small><strong id="stoneAcquisitionName">Lv10 NORMAL</strong><span id="stoneAcquisitionPower">Power +0.5%/Lv</span></div>

@@ -11,15 +11,16 @@
     monsterButton: $("monsterButton"), damageLayer: $("damageLayer"), tapStat: $("tapStat"), dpsStat: $("dpsStat"),
     lutieLevel: $("lutieLevel"), lutieTap: $("lutieTap"), lutieCost: $("lutieCost"), lutieUpgrade: $("lutieUpgrade"),
     lutieUpgrade10: $("lutieUpgrade10"), lutieUpgradeMax: $("lutieUpgradeMax"), skillGrid: $("skillGrid"),
-    guardianTotalDps: $("guardianTotalDps"), guardianSort: $("guardianSort"), guardianList: $("guardianList"), stoneCount: $("stoneCount"), stoneList: $("stoneList"),
+    guardianGold: $("guardianGold"), guardianTotalDps: $("guardianTotalDps"), guardianSort: $("guardianSort"), guardianList: $("guardianList"), stoneCount: $("stoneCount"), stoneList: $("stoneList"),
     starsValue: $("starsValue"), starsPreview: $("starsPreview"), reincarnateButton: $("reincarnateButton"), artifactList: $("artifactList"),
     saveNow: $("saveNow"), exportSave: $("exportSave"), importSave: $("importSave"), importFile: $("importFile"),
     damageNumbers: $("damageNumbers"), hitAnimations: $("hitAnimations"), reset: $("resetSave"), developerInfo: $("developerInfo"),
-    forceNazar: $("forceNazar"), forceNazarHint: $("forceNazarHint"),
+    forceNazar: $("forceNazar"), forceNazarHint: $("forceNazarHint"), addDeveloperGold: $("addDeveloperGold"),
     reincarnateModal: $("reincarnateModal"), modalStars: $("modalStars"), cancelReincarnate: $("cancelReincarnate"), confirmReincarnate: $("confirmReincarnate"),
     clearOverlay: $("clearOverlay"), continueButton: $("continueButton"), acquisitionOverlay: $("acquisitionOverlay"),
     acquisitionName: $("acquisitionName"), acquisitionDps: $("acquisitionDps"), stoneAcquisitionOverlay: $("stoneAcquisitionOverlay"),
-    stoneAcquisitionName: $("stoneAcquisitionName"), stoneAcquisitionPower: $("stoneAcquisitionPower"), toast: $("toast")
+    stoneAcquisitionName: $("stoneAcquisitionName"), stoneAcquisitionPower: $("stoneAcquisitionPower"),
+    stonePicker: $("stonePicker"), stonePickerTitle: $("stonePickerTitle"), stonePickerList: $("stonePickerList"), closeStonePicker: $("closeStonePicker"), toast: $("toast")
   };
 
   function formatNumber(value) {
@@ -43,10 +44,16 @@
   let monsterAnimationTimer = null;
   let acquisitionTimer = null;
   let toastTimer = null;
+  let openStonePickerGuardianId = null;
+  let lastStoneInventoryStage = null;
 
   function upgradeButton(button, label, quote, showLevels = false) {
     button.disabled = quote.levels === 0;
     button.textContent = showLevels && quote.levels ? `${label} (+${quote.levels})` : label;
+  }
+
+  function formatGold(value) {
+    return Math.floor(value).toLocaleString("en-US");
   }
 
   function renderCombat(state) {
@@ -95,32 +102,85 @@
     }).join("");
   }
 
-  function renderGuardians(state) {
+  function guardianUpgradeMarkup(guardianId, amount, label, quote) {
+    const displayLabel = amount === "max" && quote.levels ? `MAX +${quote.levels}` : label;
+    return `<button class="purchase-button" data-guardian-upgrade="${guardianId}" data-amount="${amount}" ${quote.levels ? "" : "disabled"}><span data-upgrade-label>${displayLabel}</span><small data-upgrade-cost>${formatGold(quote.totalCost)} G</small></button>`;
+  }
+
+  function updateGuardianValues(state) {
+    elements.guardianGold.textContent = `${formatGold(state.gold)} G`;
     elements.guardianTotalDps.textContent = formatNumber(game.getTotalGuardianDps());
     elements.guardianSort.value = state.settings.guardianSort;
+    state.guardians.filter((guardian) => guardian.activeThisRun).forEach((guardian) => {
+      const card = elements.guardianList.querySelector(`[data-guardian-card="${guardian.id}"]`);
+      if (!card) return;
+      const stone = state.manaStones.find((item) => item.id === guardian.equippedManaStoneId);
+      card.querySelector("[data-guardian-level]").textContent = `Lv. ${formatNumber(guardian.level)}`;
+      card.querySelector("[data-guardian-dps]").textContent = formatNumber(game.getGuardianFinalDps(guardian.id));
+      card.querySelector("[data-guardian-stone]").textContent = stone ? `${stone.rarity} Lv.${formatNumber(stone.level)}` : "NONE";
+      [1, 10, "max"].forEach((amount) => {
+        const quote = game.getUpgradeQuote("guardian", amount, guardian.id);
+        const button = card.querySelector(`[data-amount="${amount}"]`);
+        button.disabled = quote.levels === 0;
+        button.querySelector("[data-upgrade-label]").textContent = amount === "max" && quote.levels ? `MAX +${quote.levels}` : amount === "max" ? "MAX" : `+${amount}`;
+        button.querySelector("[data-upgrade-cost]").textContent = `${formatGold(quote.totalCost)} G`;
+      });
+    });
+  }
+
+  function renderGuardians(state) {
     const guardianView = GameData.sortGuardianView(state.guardians, state.settings.guardianSort);
     elements.guardianList.innerHTML = guardianView.map((guardian) => {
       if (!guardian.discovered) return `<article class="roster-card locked"><h3>???</h3><p>Not discovered</p></article>`;
-      const dps = game.getGuardianFinalDps(guardian.id);
-      const stone = state.manaStones.find((item) => item.id === guardian.equippedManaStoneId);
       if (!guardian.activeThisRun) return `<article class="roster-card locked"><div class="roster-card-head"><div><h3>${escapeHtml(guardian.name)}</h3><span class="group-label">${guardian.group}</span><p>Discovered · Awaiting this run</p></div><span class="reinc-chip">R${guardian.reincarnationLevel}</span></div></article>`;
       const quotes = [1, 10, "max"].map((amount) => game.getUpgradeQuote("guardian", amount, guardian.id));
-      const labels = ["+1", "+10", quotes[2].levels ? `MAX (+${quotes[2].levels})` : "MAX"];
-      return `<article class="roster-card"><div class="roster-card-head"><div><h3>${escapeHtml(guardian.name)}</h3><span class="group-label">${guardian.group}</span><p>Lv. ${formatNumber(guardian.level)} · DPS ${formatNumber(dps)}</p></div><span class="reinc-chip">REINC. ${guardian.reincarnationLevel}</span></div><div class="roster-stats"><span>STONE <b>${stone ? `Lv.${stone.level} ${stone.rarity}` : "NONE"}</b></span><span>NEXT <b>${formatNumber(Balance.guardianUpgradeCost(guardian.level, guardian.unlockOrder))}</b></span></div><div class="purchase-row">${[1, 10, "max"].map((amount, index) => `<button class="purchase-button" data-guardian-upgrade="${guardian.id}" data-amount="${amount}" ${quotes[index].levels ? "" : "disabled"}>${labels[index]}</button>`).join("")}</div></article>`;
+      return `<article class="roster-card" data-guardian-card="${guardian.id}"><div class="roster-card-head"><div><h3>${escapeHtml(guardian.name)}</h3><span class="group-label">${guardian.group}</span></div><span class="reinc-chip">REINC. ${guardian.reincarnationLevel}</span></div><div class="guardian-core-stats"><span><small>LEVEL</small><strong data-guardian-level></strong></span><span><small>DPS</small><strong data-guardian-dps></strong></span></div><button class="mana-stone-control" data-open-stone-picker="${guardian.id}"><span><small>MANA STONE</small><strong data-guardian-stone>NONE</strong></span><b aria-hidden="true">›</b></button><div class="purchase-row">${guardianUpgradeMarkup(guardian.id, 1, "+1", quotes[0])}${guardianUpgradeMarkup(guardian.id, 10, "+10", quotes[1])}${guardianUpgradeMarkup(guardian.id, "max", "MAX", quotes[2])}</div></article>`;
     }).join("");
+    updateGuardianValues(state);
+  }
+
+  function stoneEffectText(stone) {
+    const effectiveLevel = game.getEffectiveStoneLevel(stone);
+    return `DPS +${(effectiveLevel * stone.power * 100).toFixed(1)}% · Effective Lv.${formatNumber(effectiveLevel)}`;
+  }
+
+  function renderStonePicker(state) {
+    if (!openStonePickerGuardianId) return;
+    const guardian = state.guardians.find((item) => item.id === openStonePickerGuardianId && item.discovered);
+    if (!guardian) return closeStonePicker();
+    elements.stonePickerTitle.textContent = guardian.name;
+    const noneSelected = !guardian.equippedManaStoneId;
+    const noneRow = `<button class="stone-picker-item none ${noneSelected ? "selected" : ""}" data-picker-stone=""><span><strong>NONE</strong><small>Remove the equipped Mana Stone</small></span>${noneSelected ? "<b>EQUIPPED</b>" : ""}</button>`;
+    const stoneRows = state.manaStones.map((stone) => {
+      const equippedGuardian = state.guardians.find((item) => item.id === stone.equippedGuardianId);
+      const selected = stone.id === guardian.equippedManaStoneId;
+      const status = selected ? "EQUIPPED" : equippedGuardian ? `MOVE FROM ${escapeHtml(equippedGuardian.name)}` : "";
+      return `<button class="stone-picker-item ${stone.rarity.toLowerCase()} ${selected ? "selected" : ""}" data-picker-stone="${stone.id}"><span><strong>${stone.rarity} · Lv.${formatNumber(stone.level)}</strong><small>${stoneEffectText(stone)}</small></span>${status ? `<b>${status}</b>` : ""}</button>`;
+    }).join("");
+    elements.stonePickerList.innerHTML = `${noneRow}${stoneRows || `<p class="empty-state">No Mana Stones owned.</p>`}`;
+  }
+
+  function openStonePicker(guardianId) {
+    openStonePickerGuardianId = guardianId;
+    elements.stonePicker.hidden = false;
+    renderStonePicker(game.getState());
+  }
+
+  function closeStonePicker() {
+    openStonePickerGuardianId = null;
+    elements.stonePicker.hidden = true;
   }
 
   function renderStones(state) {
     elements.stoneCount.textContent = `${state.manaStones.length} STONES`;
-    const discovered = state.guardians.filter((guardian) => guardian.discovered);
+    lastStoneInventoryStage = state.stage;
     if (!state.manaStones.length) {
       elements.stoneList.innerHTML = `<div class="empty-state">Defeat Mimics and Region Bosses to find Mana Stones.</div>`;
       return;
     }
     elements.stoneList.innerHTML = state.manaStones.map((stone) => {
       const equipped = state.guardians.find((guardian) => guardian.id === stone.equippedGuardianId);
-      const options = [`<option value="">Choose Guardian</option>`, ...discovered.map((guardian) => `<option value="${guardian.id}" ${guardian.id === stone.equippedGuardianId ? "selected" : ""}>${escapeHtml(guardian.name)}</option>`)].join("");
-      return `<article class="stone-card ${stone.rarity.toLowerCase()}"><div class="stone-card-head"><div><h3>Mana Stone · Lv.${formatNumber(stone.level)}</h3><p>Effective Lv.${formatNumber(game.getEffectiveStoneLevel(stone))} · ${(stone.power * 100).toFixed(1)}% per level</p></div><span class="rarity">${stone.rarity}</span></div><p>${equipped ? `Equipped: ${escapeHtml(equipped.name)}` : "Not equipped"}</p><div class="stone-actions"><select data-stone-select="${stone.id}">${options}</select><button data-stone-equip="${stone.id}">${equipped ? "UPDATE" : "EQUIP"}</button>${equipped ? `<button data-stone-unequip="${stone.id}">REMOVE</button>` : ""}</div></article>`;
+      return `<article class="stone-card ${stone.rarity.toLowerCase()}"><div class="stone-card-head"><div><h3>Mana Stone · Lv.${formatNumber(stone.level)}</h3><p>${stoneEffectText(stone)}</p></div><span class="rarity">${stone.rarity}</span></div><p>${equipped ? `Equipped: ${escapeHtml(equipped.name)}` : "Not equipped · Select it from a Guardian card"}</p></article>`;
     }).join("");
   }
 
@@ -151,11 +211,17 @@
     elements.forceNazarHint.textContent = state.monster.type === "nazar" ? "Nazar is already active" : "Available while farming";
   }
 
-  function render(state) {
+  function render(state, event = { type: "loaded" }) {
     renderCombat(state);
     renderLutie(state);
-    renderGuardians(state);
-    renderStones(state);
+    const rebuildGuardians = ["loaded", "reset", "imported", "reincarnated", "guardianAcquired"].includes(event.type)
+      || (event.type === "settingChanged" && event.key === "guardianSort");
+    if (rebuildGuardians) renderGuardians(state);
+    else updateGuardianValues(state);
+    const rebuildStones = ["loaded", "reset", "imported", "reincarnated", "manaStoneDropped", "manaStoneEquipped", "manaStoneUnequipped"].includes(event.type)
+      || lastStoneInventoryStage !== state.stage;
+    if (rebuildStones) renderStones(state);
+    if (openStonePickerGuardianId && ["manaStoneDropped", "manaStoneEquipped", "manaStoneUnequipped", "imported", "reincarnated", "reset"].includes(event.type)) renderStonePicker(state);
     renderStars(state);
     renderSettings(state);
     elements.clearOverlay.hidden = !(state.progression.v01Cleared && !state.progression.clearSeen);
@@ -214,7 +280,7 @@
       elements.bossTimerValue.textContent = (state.boss.timeRemainingMs / 1000).toFixed(1);
       return;
     }
-    render(state);
+    render(state, event);
     if (["tap", "autoAttack", "skillAttack"].includes(event.type)) {
       const rect = elements.attackArea.getBoundingClientRect();
       const isAuto = event.type === "autoAttack";
@@ -243,21 +309,27 @@
   elements.skillGrid.addEventListener("click", (event) => { if (event.target.closest("[data-skill='flare-ray']")) game.useFlareRay(); });
 
   elements.guardianList.addEventListener("click", (event) => {
+    const stoneControl = event.target.closest("[data-open-stone-picker]");
+    if (stoneControl) return openStonePicker(stoneControl.dataset.openStonePicker);
     const button = event.target.closest("[data-guardian-upgrade]");
     if (!button) return;
     const raw = button.dataset.amount;
     game.upgradeGuardian(button.dataset.guardianUpgrade, raw === "max" ? "max" : Number(raw));
   });
   elements.guardianSort.addEventListener("change", () => game.setSetting("guardianSort", elements.guardianSort.value));
-  elements.stoneList.addEventListener("click", (event) => {
-    const equip = event.target.closest("[data-stone-equip]");
-    const unequip = event.target.closest("[data-stone-unequip]");
-    if (equip) {
-      const select = elements.stoneList.querySelector(`[data-stone-select='${equip.dataset.stoneEquip}']`);
-      if (!select.value) return showToast("Choose a discovered Guardian");
-      game.equipManaStone(equip.dataset.stoneEquip, select.value);
-    } else if (unequip) game.unequipManaStone(unequip.dataset.stoneUnequip);
+  elements.stonePickerList.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-picker-stone]");
+    if (!option || !openStonePickerGuardianId) return;
+    const state = game.getState();
+    const guardian = state.guardians.find((item) => item.id === openStonePickerGuardianId);
+    if (!option.dataset.pickerStone) {
+      if (guardian && guardian.equippedManaStoneId) game.unequipManaStone(guardian.equippedManaStoneId);
+      return;
+    }
+    game.equipManaStone(option.dataset.pickerStone, openStonePickerGuardianId);
   });
+  elements.closeStonePicker.addEventListener("click", closeStonePicker);
+  elements.stonePicker.addEventListener("click", (event) => { if (event.target === elements.stonePicker) closeStonePicker(); });
   elements.artifactList.addEventListener("click", (event) => {
     const button = event.target.closest("[data-artifact]");
     if (button) game.upgradeArtifact(button.dataset.artifact);
@@ -305,9 +377,14 @@
   elements.damageNumbers.addEventListener("change", () => game.setSetting("damageNumbers", elements.damageNumbers.checked));
   elements.hitAnimations.addEventListener("change", () => game.setSetting("hitAnimations", elements.hitAnimations.checked));
   elements.forceNazar.addEventListener("click", () => game.forceNazar());
+  elements.addDeveloperGold.addEventListener("click", () => game.addDeveloperGold());
   elements.reset.addEventListener("click", () => { if (global.confirm("Reset all progress? This cannot be undone.")) game.reset(); });
 
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && openStonePickerGuardianId) {
+      closeStonePicker();
+      return;
+    }
     if (event.repeat || event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) return;
     if (event.target.closest && event.target.closest("button, input, textarea, select, a, [contenteditable='true']")) return;
     if (![" ", "Spacebar", "z", "x", "Enter"].includes(event.key)) return;
