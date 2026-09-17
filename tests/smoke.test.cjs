@@ -5,7 +5,9 @@ const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const css = fs.readFileSync(path.join(root, "styles.css"), "utf8");
 const uiSource = fs.readFileSync(path.join(root, "ui.js"), "utf8");
+const pagesWorkflow = fs.readFileSync(path.join(root, ".github", "workflows", "deploy-pages.yml"), "utf8");
 const htmlIds = new Set([...html.matchAll(/id="([^"]+)"/g)].map((match) => match[1]));
 const uiIds = [...uiSource.matchAll(/\$\("([^"]+)"\)/g)].map((match) => match[1]);
 assert.deepEqual(uiIds.filter((id) => !htmlIds.has(id)), [], "Every UI binding resolves to index.html");
@@ -19,6 +21,15 @@ assert.match(uiSource, /render\(state, event\)/, "Subscriber passes event contex
 const guardianRebuildSource = uiSource.match(/const rebuildGuardians = ([\s\S]*?);\n    if \(rebuildGuardians\)/)[1];
 assert.doesNotMatch(guardianRebuildSource, /autoAttack|tap|skillAttack/, "Combat events never rebuild Guardian card DOM");
 assert.match(uiSource, /if \(openStonePickerGuardianId && \[/, "Open picker state is preserved and selectively refreshed");
+assert.doesNotMatch(html, /(?:href|src)="\//, "Page assets never assume the domain root");
+assert.doesNotMatch(css, /url\(\s*["']?\//, "CSS assets never assume the domain root");
+assert.match(pagesWorkflow, /branches:\s*\n\s*- main/);
+assert.match(pagesWorkflow, /workflow_dispatch:/);
+assert.match(pagesWorkflow, /contents: read[\s\S]*pages: write[\s\S]*id-token: write/);
+assert.match(pagesWorkflow, /actions\/checkout@v7/);
+assert.match(pagesWorkflow, /actions\/configure-pages@v6/);
+assert.match(pagesWorkflow, /actions\/upload-pages-artifact@v5/);
+assert.match(pagesWorkflow, /actions\/deploy-pages@v5/);
 
 const context = vm.createContext({ console, Date, JSON, Math, Map, Set, setInterval, clearInterval });
 context.window = context;
@@ -69,6 +80,64 @@ assert.equal(game.getState().monster.hp, initialHp - 1, "1. BASE_DPS deals damag
 const hpBeforeTap = game.getState().monster.hp;
 game.attack();
 assert.equal(game.getState().monster.hp, hpBeforeTap - game.getTotalTap(), "2. Lutie TAP deals calculated damage");
+
+// Normalized Guardian source stats and derived DPS.
+assert.equal(context.Balance.constants.GUARDIAN_BASE_DPS, 11, "All Guardians use the named median base DPS");
+assert.equal(new Set(context.GameData.GUARDIAN_DEFINITIONS.map((guardian) => guardian.baseDps)).size, 1, "Guardian-specific 2–20 base DPS variance is removed");
+const normalizedGuardianSeed = JSON.parse(game.exportSave());
+normalizedGuardianSeed.guardians.forEach((guardian, index) => {
+  guardian.discovered = true;
+  guardian.unlocked = true;
+  guardian.activeThisRun = true;
+  guardian.level = 7 + index;
+  guardian.reincarnationLevel = 0;
+  guardian.equippedManaStoneId = null;
+});
+normalizedGuardianSeed.artifacts.dps.level = 0;
+normalizedGuardianSeed.manaStones = [];
+const normalizedGuardianGame = createStartedGame(new MemoryAdapter(normalizedGuardianSeed));
+assert.deepEqual(normalizedGuardianGame.getState().guardians.map((guardian) => guardian.level), Array.from({ length: 10 }, (_, index) => 7 + index), "Existing save Guardian levels remain intact");
+for (const level of [1, 10, 50]) {
+  const sameLevelSave = JSON.parse(normalizedGuardianGame.exportSave());
+  sameLevelSave.guardians.forEach((guardian) => { guardian.level = level; });
+  assert.equal(normalizedGuardianGame.importSave(JSON.stringify(sameLevelSave)).ok, true);
+  assert.equal(new Set(normalizedGuardianGame.getState().guardians.map((guardian) => normalizedGuardianGame.getGuardianFinalDps(guardian.id))).size, 1, `All Guardians have identical DPS at Lv.${level}`);
+}
+assert.equal(context.Balance.guardianBaseDps(1, context.Balance.constants.GUARDIAN_BASE_DPS), 2);
+assert.equal(context.Balance.guardianBaseDps(10, context.Balance.constants.GUARDIAN_BASE_DPS), 37);
+assert.equal(context.Balance.guardianBaseDps(50, context.Balance.constants.GUARDIAN_BASE_DPS), 741);
+
+// Normal-monster Gold variance uses the injected RNG and remains centered.
+assert.equal(context.Balance.constants.NORMAL_MONSTER_GOLD_VARIANCE, 0.10);
+const minimumGoldGame = createStartedGame(new MemoryAdapter(), { random: () => 0, now: () => clock });
+const maximumGoldGame = createStartedGame(new MemoryAdapter(), { random: () => 1 - Number.EPSILON, now: () => clock });
+assert.equal(minimumGoldGame.rollNormalMonsterGold(100), 90, "Normal Gold never falls below -10%");
+assert.equal(maximumGoldGame.rollNormalMonsterGold(100), 110, "Normal Gold never exceeds +10%");
+const deterministicGoldA = createStartedGame(new MemoryAdapter(), { random: () => 0.37, now: () => clock });
+const deterministicGoldB = createStartedGame(new MemoryAdapter(), { random: () => 0.37, now: () => clock });
+assert.equal(deterministicGoldA.rollNormalMonsterGold(100), deterministicGoldB.rollNormalMonsterGold(100), "Injected RNG reproduces the same Gold reward");
+let goldSampleIndex = 0;
+const centeredGoldGame = createStartedGame(new MemoryAdapter(), { random: () => (goldSampleIndex++ + 0.5) / 21, now: () => clock });
+const centeredRewards = Array.from({ length: 21 }, () => centeredGoldGame.rollNormalMonsterGold(100));
+assert.equal(centeredRewards.reduce((sum, reward) => sum + reward, 0) / centeredRewards.length, 100, "Uniform integer outcomes average exactly to base Gold");
+assert.ok(centeredRewards.every((reward) => reward >= 90 && reward <= 110));
+const normalRewardSeed = JSON.parse(game.exportSave());
+normalRewardSeed.stage = 50;
+normalRewardSeed.gold = 0;
+normalRewardSeed.monster = { type: "normal", hp: 1, guardianId: null };
+const normalRewardRolls = [0, 0.99];
+const normalRewardGame = createStartedGame(new MemoryAdapter(normalRewardSeed), { random: () => normalRewardRolls.shift() ?? 0.99, now: () => clock });
+const stage50BaseGold = context.Balance.monsterGold(50);
+normalRewardGame.attack();
+assert.equal(normalRewardGame.getState().gold, stage50BaseGold - Math.floor(stage50BaseGold * 0.10), "Normal-monster defeat applies the rolled reward through combat");
+const mimicRewardSeed = { ...normalRewardSeed, monster: { type: "mimic", hp: 1, guardianId: null } };
+const mimicRewardGame = createStartedGame(new MemoryAdapter(mimicRewardSeed), { random: () => 0, now: () => clock });
+mimicRewardGame.attack();
+assert.equal(mimicRewardGame.getState().gold, context.Balance.mimicGold(50), "Mimic Gold remains fixed and bypasses normal variance");
+const regionRewardSeed = { ...normalRewardSeed, monster: { type: "regionBoss", hp: 1, guardianId: null } };
+const regionRewardGame = createStartedGame(new MemoryAdapter(regionRewardSeed), { random: () => 0, now: () => clock });
+regionRewardGame.attack();
+assert.equal(regionRewardGame.getState().gold, stage50BaseGold, "Region Boss Gold remains fixed and bypasses normal variance");
 
 // 3-6: roster and Guardian encounter/acquisition/DPS aggregation.
 assert.equal(state.guardians.length, 10, "3. Ten-member Guardian roster is created");
@@ -439,4 +508,4 @@ assert.equal(state.progression.farmingBeforeBoss, false);
 assert.equal(state.run.nazarEscalation, 0);
 assert.equal(upgradeGame.getTotalDps(), 1);
 
-console.log("v0.2.3 smoke test passed: stable Guardian UI contract, exact upgrade quotes, exclusive Mana Stones, developer Gold, and prior coverage.");
+console.log("v0.2.4 smoke test passed: normalized Guardian DPS, centered normal Gold variance, Pages workflow, and prior coverage.");

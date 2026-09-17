@@ -337,6 +337,14 @@
       return Math.max(1, Math.floor(baseGold * Balance.artifactMultiplier(state.artifacts.gold.level)));
     }
 
+    function rollNormalMonsterGold(baseGold) {
+      const normalizedBase = Math.max(1, Math.floor(baseGold));
+      const variance = Math.floor(normalizedBase * Balance.constants.NORMAL_MONSTER_GOLD_VARIANCE);
+      if (variance === 0) return normalizedBase;
+      const offset = Math.floor(random() * (variance * 2 + 1)) - variance;
+      return Math.max(1, normalizedBase + offset);
+    }
+
     function addGold(baseGold) {
       const reward = calculateGoldReward(baseGold);
       state.gold += reward;
@@ -473,7 +481,7 @@
       let stone = null;
       let acquisition = null;
       if (defeatedMonster.type === "normal") {
-        reward = addGold(Balance.monsterGold(state.stage));
+        reward = addGold(rollNormalMonsterGold(Balance.monsterGold(state.stage)));
         state.killsInStage += 1;
         if (state.progression.farmingBeforeBoss) {
           state.killsInStage %= Balance.constants.MONSTERS_PER_STAGE;
@@ -827,7 +835,7 @@
     return Object.freeze({
       start, stop, attack, tap: attack, autoAttack, useFlareRay, bossTimerTick, challengeBoss, giveUpBoss, forceNazar, addDeveloperGold,
       upgradeLutie, upgradeGuardian, getUpgradeQuote, getTotalTap, getTotalDps, getTotalGuardianDps,
-      getGuardianFinalDps, getEffectiveStoneLevel, calculateGoldReward, isNazarEligible, equipManaStone, unequipManaStone,
+      getGuardianFinalDps, getEffectiveStoneLevel, calculateGoldReward, rollNormalMonsterGold, isNazarEligible, equipManaStone, unequipManaStone,
       getReincarnationPreview, reincarnate, upgradeArtifact, setSetting, acknowledgeClear, reset,
       saveNow, exportSave, importSave, getState, subscribe
     });

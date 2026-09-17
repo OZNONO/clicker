@@ -7,7 +7,7 @@
   const GUARDIAN_DEFINITIONS = Object.freeze(Array.from({ length: 10 }, (_, index) => Object.freeze({
     id: `guardian-${String(index + 1).padStart(2, "0")}`,
     name: `Guardian ${String(index + 1).padStart(2, "0")}`,
-    baseDps: 2 + index * 2,
+    baseDps: Balance.constants.GUARDIAN_BASE_DPS,
     unlockOrder: index + 1,
     group: guardianGroups[index]
   })));
