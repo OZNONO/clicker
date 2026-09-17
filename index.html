@@ -4,23 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17122a">
-  <title>Lutie-like RPG Clicker v0.1.1</title>
+  <title>Lutie-like RPG Clicker v0.2</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <main class="game-shell">
     <header class="top-bar">
-      <div class="brand"><span class="brand-mark">L</span><span>LUTIE<br><small>CLICKER v0.1.1</small></span></div>
+      <div class="brand"><span class="brand-mark">L</span><span>LUTIE<br><small>CLICKER v0.2</small></span></div>
       <div class="resource"><span>STAGE</span><strong id="stageValue">1</strong></div>
       <div class="resource gold"><span>GOLD</span><strong id="goldValue">0</strong></div>
     </header>
 
     <section class="arena" id="attackArea" aria-label="Attack area">
       <div class="arena-glow"></div>
-      <div class="boss-ribbon" id="bossRibbon" hidden>BOSS</div>
+      <div class="encounter-badge" id="encounterBadge" hidden>REGION BOSS</div>
       <div class="monster-meta">
-        <span class="monster-name" id="monsterName">Slime</span>
-        <span class="kill-count" id="killCount">0 / 10</span>
+        <div><small id="stageLabel">STAGE 1</small><span class="monster-name" id="monsterName">Mossling</span></div>
+        <span class="kill-count" id="killCount">MONSTER 0 / 10</span>
       </div>
       <div class="hp-wrap">
         <div class="hp-copy"><span>HP</span><strong id="hpValue">10 / 10</strong></div>
@@ -28,11 +28,9 @@
       </div>
       <div class="boss-timer" id="bossTimerWrap" hidden><span>TIME</span><strong id="bossTimerValue">30.0</strong></div>
       <div class="farming-banner" id="farmingBanner" data-no-attack hidden>
-        <strong>BOSS FAILED</strong>
-        <span id="farmingStage">FARMING STAGE 4</span>
+        <div><strong>BOSS FAILED</strong><span id="farmingStage">FARMING STAGE 9</span><small id="nextBossHp">NEXT BOSS HP: 0</small></div>
         <button id="challengeBoss" data-no-attack>CHALLENGE BOSS</button>
       </div>
-
       <button class="monster-button" id="monsterButton" aria-label="Attack monster">
         <span class="monster-shadow"></span>
         <span class="monster-body"><span class="monster-eye left"></span><span class="monster-eye right"></span><span class="monster-mouth"></span></span>
@@ -42,59 +40,86 @@
     </section>
 
     <section class="combat-stats" aria-label="Combat stats">
-      <div><span>TAP DAMAGE</span><strong id="tapStat">1</strong></div>
+      <div><span>TAP</span><strong id="tapStat">1</strong></div>
       <i></i>
       <div><span>TOTAL DPS</span><strong id="dpsStat">1</strong></div>
     </section>
 
-    <section class="upgrade-deck">
-      <article class="upgrade-card lutie-card">
-        <div class="portrait lutie-portrait"><span></span></div>
-        <div class="upgrade-info">
-          <div class="card-heading"><div><small>HERO</small><h2>Lutie</h2></div><span class="level" id="lutieLevel">LV. 1</span></div>
-          <div class="stat-line"><span>TAP</span><strong id="lutieTap">1</strong></div>
-          <div class="next-cost"><span>NEXT</span><span class="cost"><i></i><b id="lutieCost">10</b></span></div>
-          <div class="purchase-row">
-            <button class="purchase-button" id="lutieUpgrade">x1</button>
-            <button class="purchase-button" id="lutieUpgrade10">x10</button>
-            <button class="purchase-button" id="lutieUpgradeMax">MAX</button>
-          </div>
+    <section class="tab-panels">
+      <section class="tab-panel active" id="tab-lutie" data-panel="lutie">
+        <div class="section-title"><div><small>HERO</small><h2>Lutie</h2></div><span class="level" id="lutieLevel">LV. 1</span></div>
+        <div class="summary-grid">
+          <div><span>TAP DAMAGE</span><strong id="lutieTap">1</strong></div>
+          <div><span>NEXT COST</span><strong class="coin-value" id="lutieCost">10</strong></div>
         </div>
-      </article>
+        <div class="purchase-row">
+          <button class="purchase-button" id="lutieUpgrade">x1</button>
+          <button class="purchase-button" id="lutieUpgrade10">x10</button>
+          <button class="purchase-button" id="lutieUpgradeMax">MAX</button>
+        </div>
+        <div class="subsection-heading"><span>ACTIVE SKILLS</span><small>Temporary reconstruction</small></div>
+        <div class="skill-grid" id="skillGrid"></div>
+      </section>
 
-      <article class="upgrade-card guardian-card" id="guardianCard">
-        <div class="portrait guardian-portrait"><span></span></div>
-        <div class="upgrade-info guardian-locked" id="guardianLocked">
-          <div class="card-heading"><div><small>GUARDIAN</small><h2>Locked</h2></div><span class="lock-icon">◆</span></div>
-          <p>Defeat the Stage 5 Boss</p>
-        </div>
-        <div class="upgrade-info" id="guardianUnlocked" hidden>
-          <div class="card-heading"><div><small>GUARDIAN</small><h2>Ember</h2></div><span class="level" id="guardianLevel">LV. 1</span></div>
-          <div class="stat-line"><span>DPS</span><strong id="guardianDps">2</strong></div>
-          <div class="next-cost"><span>NEXT</span><span class="cost"><i></i><b id="guardianCost">25</b></span></div>
-          <div class="purchase-row guardian-purchases">
-            <button class="purchase-button" id="guardianUpgrade">x1</button>
-            <button class="purchase-button" id="guardianUpgrade10">x10</button>
-            <button class="purchase-button" id="guardianUpgradeMax">MAX</button>
-          </div>
-        </div>
-      </article>
+      <section class="tab-panel" id="tab-guardian" data-panel="guardian" hidden>
+        <div class="section-title"><div><small>ROSTER</small><h2>Guardians</h2></div><div class="total-chip"><span>TOTAL DPS</span><strong id="guardianTotalDps">0</strong></div></div>
+        <div class="guardian-list" id="guardianList"></div>
+      </section>
 
-      <button class="reset-button" id="resetSave">RESET SAVE</button>
+      <section class="tab-panel" id="tab-stone" data-panel="stone" hidden>
+        <div class="section-title"><div><small>INVENTORY</small><h2>Mana Stones</h2></div><span class="level" id="stoneCount">0 STONES</span></div>
+        <p class="panel-note">Stone power is capped by the current Stage. One stone can be equipped to one Guardian.</p>
+        <div class="stone-list" id="stoneList"></div>
+      </section>
+
+      <section class="tab-panel" id="tab-star" data-panel="star" hidden>
+        <div class="section-title"><div><small>PERMANENT PROGRESS</small><h2>Stars</h2></div><strong class="stars-value" id="starsValue">0 ★</strong></div>
+        <div class="reincarnate-card">
+          <div><span>STARS IF REINCARNATING NOW</span><strong id="starsPreview">+1</strong></div>
+          <button id="reincarnateButton" disabled>REINCARNATE · LV 200</button>
+        </div>
+        <div class="subsection-heading"><span>ARTIFACTS</span><small>Permanent placeholder bonuses</small></div>
+        <div class="artifact-list" id="artifactList"></div>
+      </section>
+
+      <section class="tab-panel" id="tab-settings" data-panel="settings" hidden>
+        <div class="section-title"><div><small>LOCAL DATA</small><h2>Settings</h2></div></div>
+        <div class="settings-list">
+          <button id="saveNow">SAVE NOW<span>Write current state</span></button>
+          <button id="exportSave">EXPORT SAVE<span>Download JSON</span></button>
+          <button id="importSave">IMPORT SAVE<span>Choose JSON file</span></button>
+          <input type="file" id="importFile" accept="application/json,.json" hidden>
+          <label><span>DAMAGE NUMBERS</span><input type="checkbox" id="damageNumbers" checked></label>
+          <label><span>HIT ANIMATION</span><input type="checkbox" id="hitAnimations" checked></label>
+          <button class="danger" id="resetSave">RESET SAVE<span>Erase all progress</span></button>
+        </div>
+        <details class="developer-info">
+          <summary>Developer Info</summary>
+          <dl id="developerInfo"></dl>
+        </details>
+      </section>
     </section>
+
+    <nav class="bottom-nav" aria-label="Game sections">
+      <button class="active" data-tab="lutie"><i class="nav-hero"></i><span>LUTIE</span></button>
+      <button data-tab="guardian"><i class="nav-guardian"></i><span>GUARDIAN</span></button>
+      <button data-tab="stone"><i class="nav-stone"></i><span>MANA STONE</span></button>
+      <button data-tab="star"><i class="nav-star"></i><span>STAR</span></button>
+      <button data-tab="settings"><i class="nav-settings"></i><span>SETTINGS</span></button>
+    </nav>
   </main>
 
-  <div class="clear-overlay" id="clearOverlay" hidden>
-    <div class="clear-card">
-      <span class="clear-kicker">MILESTONE REACHED</span>
-      <div class="clear-emblem">10</div>
-      <h1>v0.1 Clear!</h1>
-      <p>You defeated the Stage 10 Boss.<br>The climb can continue.</p>
-      <button id="continueButton">CONTINUE</button>
-    </div>
+  <div class="modal-overlay" id="reincarnateModal" hidden>
+    <div class="modal-card"><span class="modal-kicker">PERMANENT RESET</span><h2>Reincarnate?</h2><p>Most run progress will be reset.<br>You will receive <strong id="modalStars">1 Star</strong>.</p><div><button id="cancelReincarnate">CANCEL</button><button class="confirm" id="confirmReincarnate">REINCARNATE</button></div></div>
   </div>
+  <div class="modal-overlay" id="clearOverlay" hidden>
+    <div class="modal-card clear-card"><span class="modal-kicker">MILESTONE REACHED</span><div class="clear-emblem">10</div><h2>v0.1 Clear!</h2><p>You defeated the Stage 10 Region Boss.<br>The reconstruction continues.</p><div><button class="confirm" id="continueButton">CONTINUE</button></div></div>
+  </div>
+  <div class="acquisition-overlay" id="acquisitionOverlay" hidden><small>NEW GUARDIAN</small><strong id="acquisitionName">Guardian 01</strong><span id="acquisitionDps">DPS +2</span></div>
+  <div class="toast" id="toast" hidden></div>
 
   <script src="balance.js"></script>
+  <script src="data.js"></script>
   <script src="storage.js"></script>
   <script src="game.js"></script>
   <script src="ui.js"></script>

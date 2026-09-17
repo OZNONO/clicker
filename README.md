@@ -1,37 +1,61 @@
-# Lutie-like RPG Clicker v0.1.1
+# Lutie-like RPG Clicker v0.2
 
-A small, offline-first browser prototype that recreates the feel of a click → grow → auto-attack RPG loop using original CSS shapes and placeholder art only.
+A personal reconstruction prototype exploring the overall structure and feel of a discontinued mobile RPG clicker. It uses original CSS placeholder shapes only; no original copyrighted image or audio assets are included.
 
-> All balance numbers in this project are **temporary reconstruction values, not verified original game values**.
+> All currently unverified numerical balance and several progression rules are **temporary reconstruction values, not verified original game values**. They are isolated in `balance.js` and `data.js` so historical findings can replace them later.
 
 ## Run
 
-Double-click `index.html`, or open it directly in any modern browser. No server, install, build step, account, or network connection is required. (The optional web font gracefully falls back to the system font while offline.)
+Double-click `index.html` and play in a modern browser. There is no build step, server, database, login, analytics, payment, or online save. Progress is stored locally through `LocalStorageAdapter`.
 
-## Core loop
+## Current systems
 
-- Tap the arena or monster, or press Space/Z/X/Enter, to deal Lutie's TAP damage.
-- A base 1 DPS auto-attack runs from the beginning; unlocked Guardian DPS is added to it.
-- Defeated monsters award gold; every 10 normal monsters advances the stage.
-- Every fifth stage is a 30-second boss fight. Failure returns to the previous stage for repeatable farming until **Challenge Boss** is selected.
-- The Stage 5 boss unlocks Ember, the first Guardian. Ember attacks once per second using its current DPS.
-- Defeating the Stage 10 boss displays the v0.1 Clear milestone, then play continues.
-- Spend gold in the lower panels to upgrade Lutie and the unlocked Guardian by x1, up to x10, or the affordable MAX.
+- TAP combat by pointer or Space/Z/X/Enter, hit reactions, and distinct TAP/DPS feedback
+- Base DPS plus combined active Guardian DPS
+- Mobile layout with persistent combat view and five bottom tabs
+- Ten-placeholder Guardian roster with encounters at Stages 5, 15, 25, and so on
+- Region Bosses at Stages 10, 20, 30, and so on
+- Thirty-second timed encounters, failure farming, and manual boss retry
+- Independent Guardian levels, x1/x10/MAX upgrades, and permanent reincarnation levels
+- Mimics with bonus Gold and Mana Stone drops
+- Farming-only Nazar encounters with escalating HP
+- Normal, High, and Legendary Mana Stones with Stage-based effective-level caps
+- One-stone-per-Guardian equip and unequip rules
+- Lutie active-skill slots; Flare Ray is the single functional prototype skill
+- Reincarnation, Stars, and three placeholder Artifacts for TAP/DPS/Gold
+- Automatic local save, manual Save Now, JSON Export/Import, and complete Reset Save
+- Large-number formatting through K/M/B/T/Qa/Qi/Sx and scientific notation fallback
 
-## Files
+## Save data and migration
 
-- `balance.js` — every formula and tuning constant
-- `game.js` — serializable game state, combat, monster creation, upgrades, and progression
-- `ui.js` — DOM rendering, input binding, number formatting, and damage popups
+The full game is a single JSON-serializable save object. Version 2 separates current-run state from permanent discovery and progression. Existing version 1 saves are migrated without intentionally deleting their Gold, Stage, Lutie level, first Guardian level/unlock, or boss retry/farming progress.
+
+`game.js` and `ui.js` never access browser storage directly. They use the adapter boundary in `storage.js`:
+
+```text
+saveGame(state)
+loadGame()
+resetGame()
+```
+
+JSON Export/Import is supported in the Settings tab. Imports are parsed and structurally validated before replacing the current state; invalid input leaves the active save untouched.
+
+## File responsibilities
+
+- `data.js` — placeholder Guardian, Artifact, and skill definitions
+- `balance.js` — reconstruction constants and replaceable formulas
+- `game.js` — runtime state, calculations, combat, progression, migration, and save import/export
+- `ui.js` — DOM rendering, tab navigation, keyboard/pointer input, files, and visual feedback
 - `storage.js` — persistence interface and `LocalStorageAdapter`
-- `styles.css` — mobile-first presentation and CSS-only artwork
+- `styles.css` — mobile layout and CSS-only placeholder graphics
+- `tests/smoke.test.cjs` — deterministic smoke coverage with injected RNG
 
-Scripts use browser globals instead of ES module imports so the game works when opened directly through `file://`. The game and UI never call `localStorage` directly. `game.js` receives an adapter exposing `saveGame(state)`, `loadGame()`, and `resetGame()`, so a future Supabase or Firebase adapter can replace local storage without changing combat or UI logic.
+## Verification
 
-## Save data
+Run:
 
-The entire save is one JSON-serializable object with a `saveVersion`, timestamp, currency, stage state, Lutie data, Guardian array, boss deadline, retry/farming progression flags, and current monster. State changes save automatically. **Reset Save** asks for confirmation before replacing all progress with a fresh initial state.
+```powershell
+node tests/smoke.test.cjs
+```
 
-## Balance tuning
-
-Edit formulas and constants only in `balance.js`. Values are kept as full JavaScript numbers internally; `formatNumber` abbreviates large values only for display (`1K`, `1M`, `1B`, `1T`).
+The smoke suite covers the 34 requested combat, encounter, roster, Mana Stone, Nazar, reincarnation, Artifact, bulk-upgrade, save, migration, import, and reset behaviors.
