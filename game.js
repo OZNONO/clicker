@@ -162,7 +162,7 @@
         ...base,
         ...saved,
         saveVersion: Balance.constants.SAVE_VERSION,
-        lutie: { ...base.lutie, ...(saved.lutie || {}) },
+        lutie: { level: Math.max(1, validNumber(saved.lutie && saved.lutie.level, 1)) },
         artifacts: {
           tap: { ...base.artifacts.tap, ...((saved.artifacts && saved.artifacts.tap) || {}) },
           dps: { ...base.artifacts.dps, ...((saved.artifacts && saved.artifacts.dps) || {}) },
@@ -176,7 +176,19 @@
         boss: { ...base.boss, ...(saved.boss || {}) }
       };
       const savedGuardians = new Map((Array.isArray(saved.guardians) ? saved.guardians : []).map((guardian) => [guardian.id, guardian]));
-      next.guardians = base.guardians.map((guardian) => ({ ...guardian, ...(savedGuardians.get(guardian.id) || {}) }));
+      next.guardians = base.guardians.map((guardian) => {
+        const persisted = savedGuardians.get(guardian.id) || {};
+        return {
+          ...guardian,
+          discovered: Boolean(persisted.discovered),
+          unlocked: Boolean(persisted.unlocked),
+          activeThisRun: Boolean(persisted.activeThisRun),
+          level: Math.max(1, validNumber(persisted.level, 1)),
+          reincarnationLevel: Math.max(0, validNumber(persisted.reincarnationLevel, 0)),
+          equippedManaStoneId: typeof persisted.equippedManaStoneId === "string" ? persisted.equippedManaStoneId : null,
+          acquisitionOrder: Number.isFinite(persisted.acquisitionOrder) ? persisted.acquisitionOrder : null
+        };
+      });
       let nextAcquisitionOrder = next.guardians
         .filter((guardian) => guardian.discovered && Number.isFinite(guardian.acquisitionOrder))
         .reduce((highest, guardian) => Math.max(highest, guardian.acquisitionOrder), 0) + 1;
@@ -187,7 +199,13 @@
       });
       next.lifetime.nextGuardianAcquisitionOrder = Math.max(validNumber(next.lifetime.nextGuardianAcquisitionOrder, 1), nextAcquisitionOrder);
       if (!["ACQUIRED", "NAME", "GROUP"].includes(next.settings.guardianSort)) next.settings.guardianSort = "ACQUIRED";
-      next.manaStones = Array.isArray(saved.manaStones) ? saved.manaStones.filter(isValidStone).map((stone) => ({ ...stone })) : [];
+      next.manaStones = Array.isArray(saved.manaStones) ? saved.manaStones.filter(isValidStone).map((stone) => ({
+        id: stone.id,
+        level: Math.max(1, stone.level),
+        rarity: stone.rarity,
+        power: Balance.manaStonePowerForRarity(stone.rarity),
+        equippedGuardianId: typeof stone.equippedGuardianId === "string" ? stone.equippedGuardianId : null
+      })) : [];
       next.gold = Math.max(0, validNumber(next.gold, 0));
       next.stage = Math.max(1, validNumber(next.stage, 1));
       next.killsInStage = Math.max(0, validNumber(next.killsInStage, 0));
@@ -211,7 +229,7 @@
       if (!saved || typeof saved !== "object") return initialState();
       try {
         if (saved.saveVersion === 1) return migrateV1(saved);
-        if ([2, Balance.constants.SAVE_VERSION].includes(saved.saveVersion)) return normalizeV2(saved);
+        if ([2, 3, Balance.constants.SAVE_VERSION].includes(saved.saveVersion)) return normalizeV2(saved);
       } catch (_error) {
         return initialState();
       }
@@ -224,14 +242,51 @@
 
     function isImportCandidate(candidate) {
       return candidate && typeof candidate === "object"
-        && [1, 2, Balance.constants.SAVE_VERSION].includes(candidate.saveVersion)
+        && [1, 2, 3, Balance.constants.SAVE_VERSION].includes(candidate.saveVersion)
         && Number.isFinite(candidate.gold)
         && Number.isFinite(candidate.stage)
         && candidate.lutie && Number.isFinite(candidate.lutie.level);
     }
 
+    function serializeState() {
+      return {
+        saveVersion: Balance.constants.SAVE_VERSION,
+        updatedAt: state.updatedAt,
+        gold: state.gold,
+        stage: state.stage,
+        killsInStage: state.killsInStage,
+        lutie: { level: state.lutie.level },
+        guardians: state.guardians.map((guardian) => ({
+          id: guardian.id,
+          discovered: guardian.discovered,
+          unlocked: guardian.unlocked,
+          activeThisRun: guardian.activeThisRun,
+          level: guardian.level,
+          reincarnationLevel: guardian.reincarnationLevel,
+          equippedManaStoneId: guardian.equippedManaStoneId,
+          acquisitionOrder: guardian.acquisitionOrder
+        })),
+        manaStones: state.manaStones.map((stone) => ({
+          id: stone.id,
+          level: stone.level,
+          rarity: stone.rarity,
+          equippedGuardianId: stone.equippedGuardianId
+        })),
+        stars: state.stars,
+        artifacts: clone(state.artifacts),
+        progression: clone(state.progression),
+        run: clone(state.run),
+        lifetime: clone(state.lifetime),
+        skills: clone(state.skills),
+        settings: clone(state.settings),
+        boss: clone(state.boss),
+        monster: { type: state.monster.type, hp: state.monster.hp, guardianId: state.monster.guardianId }
+      };
+    }
+
     function save() {
-      state = storageAdapter.saveGame(state);
+      const saved = storageAdapter.saveGame(serializeState());
+      state.updatedAt = saved.updatedAt || state.updatedAt;
       return getState();
     }
 
@@ -320,6 +375,12 @@
         && getTotalDps() >= Balance.monsterBaseHp(state.stage) * Balance.constants.NAZAR_DPS_THRESHOLD;
     }
 
+    function spawnNazar() {
+      const escalation = state.run.nazarEscalation;
+      state.monster = createMonster("nazar", state.stage, { escalation });
+      state.run.nazarEscalation += 1;
+    }
+
     function spawnCurrentMain({ allowNazar = true, startTimer = false } = {}) {
       const encounterType = state.progression.farmingBeforeBoss ? null : encounterTypeForStage(state.stage);
       if (encounterType === "guardian") {
@@ -327,9 +388,7 @@
       } else if (encounterType === "regionBoss") {
         state.monster = createMonster("regionBoss", state.stage);
       } else if (allowNazar && isNazarEligible() && random() < Balance.constants.NAZAR_CHANCE) {
-        const escalation = state.run.nazarEscalation;
-        state.monster = createMonster("nazar", state.stage, { escalation });
-        state.run.nazarEscalation += 1;
+        spawnNazar();
       } else {
         state.monster = createMonster("normal", state.stage);
       }
@@ -432,7 +491,7 @@
         stone = maybeDropManaStone(Balance.constants.MIMIC_MANA_STONE_DROP_CHANCE);
         spawnCurrentMain();
       } else if (defeatedMonster.type === "nazar") {
-        reward = addGold(Balance.monsterGold(state.stage));
+        reward = 0;
         spawnCurrentMain();
       } else {
         reward = addGold(Balance.monsterGold(state.stage));
@@ -568,6 +627,14 @@
       return failBoss();
     }
 
+    function forceNazar() {
+      if (!state.progression.farmingBeforeBoss || state.monster.type === "nazar") return false;
+      spawnNazar();
+      save();
+      emit("nazarForced");
+      return true;
+    }
+
     function equipManaStone(stoneId, guardianId) {
       const stone = state.manaStones.find((item) => item.id === stoneId);
       const guardian = state.guardians.find((item) => item.id === guardianId);
@@ -685,7 +752,7 @@
     }
 
     function exportSave() {
-      return JSON.stringify(getState(), null, 2);
+      return JSON.stringify(serializeState(), null, 2);
     }
 
     function importSave(jsonText) {
@@ -744,7 +811,7 @@
     }
 
     return Object.freeze({
-      start, stop, attack, tap: attack, autoAttack, useFlareRay, bossTimerTick, challengeBoss, giveUpBoss,
+      start, stop, attack, tap: attack, autoAttack, useFlareRay, bossTimerTick, challengeBoss, giveUpBoss, forceNazar,
       upgradeLutie, upgradeGuardian, getUpgradeQuote, getTotalTap, getTotalDps, getTotalGuardianDps,
       getGuardianFinalDps, getEffectiveStoneLevel, calculateGoldReward, isNazarEligible, equipManaStone, unequipManaStone,
       getReincarnationPreview, reincarnate, upgradeArtifact, setSetting, acknowledgeClear, reset,

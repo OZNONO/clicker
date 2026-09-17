@@ -3,7 +3,7 @@
 
   // All unverified values below are temporary reconstruction values.
   const constants = Object.freeze({
-    SAVE_VERSION: 3,
+    SAVE_VERSION: 4,
     MONSTERS_PER_STAGE: 10,
     GUARDIAN_ENCOUNTER_OFFSET: 5,
     REGION_LENGTH: 10,
@@ -35,7 +35,7 @@
     MIMIC_GOLD_MULTIPLIER: 5,
     MIMIC_MANA_STONE_DROP_CHANCE: 0.35,
     REGION_BOSS_HIGH_STONE_CHANCE: 0.15,
-    NAZAR_CHANCE: 0.05,
+    NAZAR_CHANCE: 0.10,
     NAZAR_DPS_THRESHOLD: 0.50,
     NAZAR_INITIAL_HP_MULTIPLIER: 2,
     NAZAR_ESCALATION_MULTIPLIER: 2,

@@ -170,15 +170,47 @@ nazarSeed.guardians.forEach((guardian, index) => { if (index < 2) { guardian.dis
 const nazarRolls = [0.99, 0, 0];
 const nazarGame = createStartedGame(new MemoryAdapter(nazarSeed), { random: () => nazarRolls.length ? nazarRolls.shift() : 0, now: () => clock });
 assert.equal(nazarGame.isNazarEligible(), true, "15. Nazar indicator condition is calculated from farming DPS");
+const noNazarGame = createStartedGame(new MemoryAdapter(nazarSeed), { random: () => 0.11, now: () => clock });
+defeatCurrent(noNazarGame);
+assert.equal(noNazarGame.getState().monster.type, "normal", "A roll above the named 10% chance does not spawn Nazar");
 defeatCurrent(nazarGame);
 assert.equal(nazarGame.getState().monster.type, "nazar", "15. Eligible farming spawn can become Nazar");
 const firstNazarHp = nazarGame.getState().monster.maxHp;
+const goldBeforeNazar = nazarGame.getState().gold;
+const stonesBeforeNazar = nazarGame.getState().manaStones.length;
+const killsBeforeNazar = nazarGame.getState().killsInStage;
 defeatCurrent(nazarGame);
 assert.equal(nazarGame.getState().monster.type, "nazar");
+assert.equal(nazarGame.getState().gold, goldBeforeNazar, "Nazar gives zero Gold");
+assert.equal(nazarGame.getState().manaStones.length, stonesBeforeNazar, "Nazar gives zero drops");
+assert.equal(nazarGame.getState().killsInStage, killsBeforeNazar, "Nazar does not advance normal kill progression");
 assert.equal(nazarGame.getState().monster.maxHp, firstNazarHp * 2, "16. Repeated Nazar HP escalates x2");
 defeatCurrent(nazarGame);
 assert.equal(nazarGame.getState().monster.maxHp, firstNazarHp * 4, "16. Nazar HP sequence continues 2x → 4x → 8x");
+defeatCurrent(nazarGame);
+assert.equal(nazarGame.getState().monster.maxHp, firstNazarHp * 8, "16. Nazar HP sequence continues to 16x");
+assert.equal(context.Balance.constants.NAZAR_CHANCE, 0.10, "Natural Nazar chance is the named 10% tuning value");
 assert.equal(context.Balance.constants.MIMIC_CHANCE, 0.01, "Mimic chance is tuned to 1%");
+
+const forceSeed = JSON.parse(game.exportSave());
+forceSeed.stage = 9;
+forceSeed.killsInStage = 6;
+forceSeed.progression.farmingBeforeBoss = true;
+forceSeed.progression.bossRetryAvailable = true;
+forceSeed.progression.pendingBossStage = 10;
+forceSeed.progression.pendingEncounterType = "regionBoss";
+forceSeed.run.nazarEscalation = 0;
+forceSeed.monster = { type: "normal", hp: context.Balance.monsterBaseHp(9), guardianId: null };
+const forceAdapter = new MemoryAdapter(forceSeed);
+const forceGame = createStartedGame(forceAdapter);
+assert.equal(game.forceNazar(), false, "FORCE NAZAR is unavailable outside farming");
+assert.equal(forceGame.forceNazar(), true, "FORCE NAZAR works while farming without activation condition");
+assert.equal(forceGame.getState().monster.type, "nazar");
+assert.equal(forceGame.forceNazar(), false, "FORCE NAZAR never creates a duplicate active Nazar");
+const forcedReload = createStartedGame(forceAdapter);
+assert.equal(forcedReload.getState().monster.type, "nazar", "Forced Nazar survives the normal save/load path");
+assert.equal(forcedReload.getState().stage, 9);
+assert.equal(forcedReload.getState().killsInStage, 6);
 
 // 17-27: reincarnation, permanence, and calculation bonuses.
 const permanentSeed = JSON.parse(game.exportSave());
@@ -275,7 +307,7 @@ const v1 = {
   monster: { name: "Mossling", isBoss: false, hp: 12, maxHp: context.Balance.monsterBaseHp(9) }
 };
 const migrated = createStartedGame(new MemoryAdapter(v1)).getState();
-assert.equal(migrated.saveVersion, 3, "31. v1 save migrates to v3");
+assert.equal(migrated.saveVersion, 4, "31. v1 save migrates to v4");
 assert.equal(migrated.gold, 123);
 assert.equal(migrated.stage, 9);
 assert.equal(migrated.lutie.level, 7);
@@ -295,7 +327,7 @@ v2.manaStones = [{ id: "v2-stone", level: 20, rarity: "HIGH", power: context.Bal
 const migratedV2Adapter = new MemoryAdapter(v2);
 const migratedV2Game = createStartedGame(migratedV2Adapter);
 const migratedV2 = migratedV2Game.getState();
-assert.equal(migratedV2.saveVersion, 3, "v0.2 save migrates to v3");
+assert.equal(migratedV2.saveVersion, 4, "v0.2 save migrates to v4");
 assert.equal(migratedV2.guardians[0].level, 17);
 assert.equal(migratedV2.guardians[0].reincarnationLevel, 3);
 assert.equal(migratedV2.guardians[0].equippedManaStoneId, "v2-stone");
@@ -303,13 +335,44 @@ assert.equal(migratedV2.guardians[0].acquisitionOrder, 1, "Migration creates det
 const migratedV2Reload = createStartedGame(migratedV2Adapter).getState();
 assert.equal(migratedV2Reload.guardians[0].acquisitionOrder, 1, "acquisitionOrder survives save/load");
 
+const legacyDerived = JSON.parse(game.exportSave());
+legacyDerived.saveVersion = 3;
+legacyDerived.lutie.level = 12;
+legacyDerived.lutie.tap = 999999;
+legacyDerived.guardians[0].discovered = true;
+legacyDerived.guardians[0].activeThisRun = true;
+legacyDerived.guardians[0].unlocked = true;
+legacyDerived.guardians[0].level = 7;
+legacyDerived.guardians[0].dps = 999999;
+legacyDerived.guardians[0].baseDps = 999999;
+legacyDerived.guardians[0].name = "Stale Guardian";
+legacyDerived.manaStones = [{ id: "legacy-power", level: 8, rarity: "NORMAL", power: 999, equippedGuardianId: legacyDerived.guardians[0].id }];
+legacyDerived.guardians[0].equippedManaStoneId = "legacy-power";
+legacyDerived.monster.maxHp = 999999;
+const derivedAdapter = new MemoryAdapter(legacyDerived);
+const derivedGame = createStartedGame(derivedAdapter);
+const hydratedGuardian = derivedGame.getState().guardians[0];
+const guardianDefinition = context.GameData.GUARDIAN_DEFINITIONS[0];
+assert.equal(hydratedGuardian.level, 7, "Guardian source level is preserved");
+assert.equal(hydratedGuardian.baseDps, guardianDefinition.baseDps, "Legacy baseDps cannot override current definitions");
+assert.equal(hydratedGuardian.name, guardianDefinition.name);
+assert.notEqual(derivedGame.getGuardianFinalDps(hydratedGuardian.id), 999999, "Legacy saved DPS never overrides current balance formula");
+assert.equal(derivedGame.getTotalTap(), context.Balance.lutieTap(12), "Legacy saved TAP never overrides current balance formula");
+assert.equal(derivedGame.getState().manaStones[0].power, context.Balance.manaStonePowerForRarity("NORMAL"), "Mana Stone power is rehydrated from current balance");
+assert.equal(derivedGame.getState().monster.maxHp, context.Balance.monsterBaseHp(derivedGame.getState().stage), "Monster max HP is rehydrated from current balance");
+assert.equal(derivedAdapter.data.guardians[0].dps, undefined, "Persistent payload omits Guardian DPS");
+assert.equal(derivedAdapter.data.guardians[0].baseDps, undefined, "Persistent payload omits static Guardian baseDps");
+assert.equal(derivedAdapter.data.lutie.tap, undefined, "Persistent payload omits Lutie TAP");
+assert.equal(derivedAdapter.data.manaStones[0].power, undefined, "Persistent payload omits derived Stone power");
+assert.equal(derivedAdapter.data.monster.maxHp, undefined, "Persistent payload omits monster max HP");
+
 // 32-34: export, invalid import, complete reset.
 const exported = upgradeGame.exportSave();
-assert.equal(JSON.parse(exported).saveVersion, 3, "32. Export produces valid JSON");
+assert.equal(JSON.parse(exported).saveVersion, 4, "32. Export produces valid JSON");
 const beforeInvalidImport = upgradeGame.exportSave();
 assert.equal(upgradeGame.importSave("{bad json").ok, false);
 assert.equal(upgradeGame.exportSave(), beforeInvalidImport, "33. Invalid JSON does not damage current state");
-assert.equal(upgradeGame.importSave(JSON.stringify({ saveVersion: 3, gold: "bad" })).ok, false);
+assert.equal(upgradeGame.importSave(JSON.stringify({ saveVersion: 4, gold: "bad" })).ok, false);
 assert.equal(upgradeGame.exportSave(), beforeInvalidImport, "33. Invalid structure does not damage current state");
 upgradeGame.reset();
 state = upgradeGame.getState();
@@ -323,4 +386,4 @@ assert.equal(state.progression.farmingBeforeBoss, false);
 assert.equal(state.run.nazarEscalation, 0);
 assert.equal(upgradeGame.getTotalDps(), 1);
 
-console.log("v0.2.1 smoke test passed: boss rewards/GIVE UP, Nazar UX, exact upgrades, sorting, migration, and prior coverage.");
+console.log("v0.2.2 smoke test passed: derived-state rehydration, rewardless Nazar escalation, FORCE NAZAR, migration, and prior coverage.");

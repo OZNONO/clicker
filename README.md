@@ -1,4 +1,4 @@
-# Lutie-like RPG Clicker v0.2.1
+# Lutie-like RPG Clicker v0.2.2
 
 A personal reconstruction prototype exploring the overall structure and feel of a discontinued mobile RPG clicker. It uses original CSS placeholder shapes only; no original copyrighted image or audio assets are included.
 
@@ -19,7 +19,7 @@ Double-click `index.html` and play in a modern browser. There is no build step, 
 - Guaranteed Region Boss Mana Stone rewards (Normal, with a provisional High upgrade chance)
 - Independent Guardian levels, exact +1/+10/MAX upgrades, groups, acquisition-order sorting, and permanent reincarnation levels
 - Mimics with a provisional 1% appearance rate, bonus Gold, and Mana Stone drops
-- Farming-only Nazar indicator and encounters with hidden, exponentially escalating HP
+- Farming-only Nazar indicator and encounters with hidden, exponentially escalating HP; Nazar grants no Gold or drops
 - Normal, High, and Legendary Mana Stones with Stage-based effective-level caps
 - One-stone-per-Guardian equip and unequip rules
 - Lutie active-skill slots; Flare Ray is the single functional prototype skill
@@ -29,7 +29,7 @@ Double-click `index.html` and play in a modern browser. There is no build step, 
 
 ## Save data and migration
 
-The full game is a single JSON-serializable save object. Version 3 adds stable Guardian acquisition order and sort preferences to the run/permanent state introduced in v0.2. Version 1 and Version 2 saves are migrated without intentionally deleting Gold, Stage, Lutie level, Guardian level/discovery/reincarnation/Stone data, or boss retry/farming progress.
+The full game is a single JSON-serializable save object. Version 4 stores progression source data but omits recalculable combat values such as Guardian DPS, Lutie TAP, Stone power, and monster max HP. These values are always rehydrated from the current `balance.js` and `data.js`, so balance changes apply to old saves immediately. Version 1, 2, and 3 saves migrate without intentionally deleting Gold, Stage, Lutie level, Guardian level/discovery/reincarnation/Stone data, or boss retry/farming progress.
 
 `game.js` and `ui.js` never access browser storage directly. They use the adapter boundary in `storage.js`:
 
@@ -40,6 +40,8 @@ resetGame()
 ```
 
 JSON Export/Import is supported in the Settings tab. Imports are parsed and structurally validated before replacing the current state; invalid input leaves the active save untouched.
+
+The collapsed Developer Info area includes a minimal **Force Nazar** control. It is available only while farming, does not bypass normal reward or escalation rules, and exists solely for prototype testing.
 
 ## File responsibilities
 
@@ -59,4 +61,6 @@ Run:
 node tests/smoke.test.cjs
 ```
 
-The smoke suite retains the v0.2 coverage and adds deterministic checks for guaranteed Region Boss Stones, Give Up, farming persistence, Nazar UX/escalation, exact +10 purchases, Guardian sorting, acquisition order, and v2→v3 migration.
+The smoke suite retains prior coverage and adds deterministic checks for derived-stat rehydration, legacy-field isolation, rewardless Nazar kills, 2x→4x→8x→16x anti-camping escalation, the temporary 10% natural Nazar chance, Force Nazar, and v1/v2/v3→v4 migration.
+
+Nazar appearance rates and all other unverified balance constants remain temporary tuning values rather than verified original values.

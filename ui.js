@@ -15,6 +15,7 @@
     starsValue: $("starsValue"), starsPreview: $("starsPreview"), reincarnateButton: $("reincarnateButton"), artifactList: $("artifactList"),
     saveNow: $("saveNow"), exportSave: $("exportSave"), importSave: $("importSave"), importFile: $("importFile"),
     damageNumbers: $("damageNumbers"), hitAnimations: $("hitAnimations"), reset: $("resetSave"), developerInfo: $("developerInfo"),
+    forceNazar: $("forceNazar"), forceNazarHint: $("forceNazarHint"),
     reincarnateModal: $("reincarnateModal"), modalStars: $("modalStars"), cancelReincarnate: $("cancelReincarnate"), confirmReincarnate: $("confirmReincarnate"),
     clearOverlay: $("clearOverlay"), continueButton: $("continueButton"), acquisitionOverlay: $("acquisitionOverlay"),
     acquisitionName: $("acquisitionName"), acquisitionDps: $("acquisitionDps"), stoneAcquisitionOverlay: $("stoneAcquisitionOverlay"),
@@ -71,6 +72,7 @@
     const nazarEligible = game.isNazarEligible();
     elements.nazarIndicator.hidden = !state.progression.farmingBeforeBoss;
     elements.nazarIndicator.classList.toggle("active", nazarEligible);
+    elements.nazarIndicator.querySelector("span").textContent = nazarEligible ? "NAZAR ACTIVE" : "NAZAR";
     ["normal", "guardian", "regionBoss", "mimic", "nazar"].forEach((type) => elements.monsterButton.classList.toggle(`type-${type}`, monster.type === type));
     elements.tapStat.textContent = formatNumber(game.getTotalTap());
     elements.dpsStat.textContent = formatNumber(game.getTotalDps());
@@ -144,6 +146,9 @@
       ["Boss Target", state.progression.pendingBossStage || "—"], ["Nazar Escalation", state.run.nazarEscalation],
       ["Total TAP", formatNumber(game.getTotalTap())], ["Total DPS", formatNumber(game.getTotalDps())]
     ].map(([term, value]) => `<dt>${term}</dt><dd>${value}</dd>`).join("");
+    const canForceNazar = state.progression.farmingBeforeBoss && state.monster.type !== "nazar";
+    elements.forceNazar.disabled = !canForceNazar;
+    elements.forceNazarHint.textContent = state.monster.type === "nazar" ? "Nazar is already active" : "Available while farming";
   }
 
   function render(state) {
@@ -299,6 +304,7 @@
   });
   elements.damageNumbers.addEventListener("change", () => game.setSetting("damageNumbers", elements.damageNumbers.checked));
   elements.hitAnimations.addEventListener("change", () => game.setSetting("hitAnimations", elements.hitAnimations.checked));
+  elements.forceNazar.addEventListener("click", () => game.forceNazar());
   elements.reset.addEventListener("click", () => { if (global.confirm("Reset all progress? This cannot be undone.")) game.reset(); });
 
   document.addEventListener("keydown", (event) => {
