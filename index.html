@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#17122a">
+  <title>Lutie-like RPG Clicker v0.1.1</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="game-shell">
+    <header class="top-bar">
+      <div class="brand"><span class="brand-mark">L</span><span>LUTIE<br><small>CLICKER v0.1.1</small></span></div>
+      <div class="resource"><span>STAGE</span><strong id="stageValue">1</strong></div>
+      <div class="resource gold"><span>GOLD</span><strong id="goldValue">0</strong></div>
+    </header>
+
+    <section class="arena" id="attackArea" aria-label="Attack area">
+      <div class="arena-glow"></div>
+      <div class="boss-ribbon" id="bossRibbon" hidden>BOSS</div>
+      <div class="monster-meta">
+        <span class="monster-name" id="monsterName">Slime</span>
+        <span class="kill-count" id="killCount">0 / 10</span>
+      </div>
+      <div class="hp-wrap">
+        <div class="hp-copy"><span>HP</span><strong id="hpValue">10 / 10</strong></div>
+        <div class="hp-track"><div class="hp-fill" id="hpFill"></div></div>
+      </div>
+      <div class="boss-timer" id="bossTimerWrap" hidden><span>TIME</span><strong id="bossTimerValue">30.0</strong></div>
+      <div class="farming-banner" id="farmingBanner" data-no-attack hidden>
+        <strong>BOSS FAILED</strong>
+        <span id="farmingStage">FARMING STAGE 4</span>
+        <button id="challengeBoss" data-no-attack>CHALLENGE BOSS</button>
+      </div>
+
+      <button class="monster-button" id="monsterButton" aria-label="Attack monster">
+        <span class="monster-shadow"></span>
+        <span class="monster-body"><span class="monster-eye left"></span><span class="monster-eye right"></span><span class="monster-mouth"></span></span>
+      </button>
+      <p class="tap-hint">TAP OR PRESS SPACE · Z · X · ENTER</p>
+      <div class="damage-layer" id="damageLayer" aria-hidden="true"></div>
+    </section>
+
+    <section class="combat-stats" aria-label="Combat stats">
+      <div><span>TAP DAMAGE</span><strong id="tapStat">1</strong></div>
+      <i></i>
+      <div><span>TOTAL DPS</span><strong id="dpsStat">1</strong></div>
+    </section>
+
+    <section class="upgrade-deck">
+      <article class="upgrade-card lutie-card">
+        <div class="portrait lutie-portrait"><span></span></div>
+        <div class="upgrade-info">
+          <div class="card-heading"><div><small>HERO</small><h2>Lutie</h2></div><span class="level" id="lutieLevel">LV. 1</span></div>
+          <div class="stat-line"><span>TAP</span><strong id="lutieTap">1</strong></div>
+          <div class="next-cost"><span>NEXT</span><span class="cost"><i></i><b id="lutieCost">10</b></span></div>
+          <div class="purchase-row">
+            <button class="purchase-button" id="lutieUpgrade">x1</button>
+            <button class="purchase-button" id="lutieUpgrade10">x10</button>
+            <button class="purchase-button" id="lutieUpgradeMax">MAX</button>
+          </div>
+        </div>
+      </article>
+
+      <article class="upgrade-card guardian-card" id="guardianCard">
+        <div class="portrait guardian-portrait"><span></span></div>
+        <div class="upgrade-info guardian-locked" id="guardianLocked">
+          <div class="card-heading"><div><small>GUARDIAN</small><h2>Locked</h2></div><span class="lock-icon">◆</span></div>
+          <p>Defeat the Stage 5 Boss</p>
+        </div>
+        <div class="upgrade-info" id="guardianUnlocked" hidden>
+          <div class="card-heading"><div><small>GUARDIAN</small><h2>Ember</h2></div><span class="level" id="guardianLevel">LV. 1</span></div>
+          <div class="stat-line"><span>DPS</span><strong id="guardianDps">2</strong></div>
+          <div class="next-cost"><span>NEXT</span><span class="cost"><i></i><b id="guardianCost">25</b></span></div>
+          <div class="purchase-row guardian-purchases">
+            <button class="purchase-button" id="guardianUpgrade">x1</button>
+            <button class="purchase-button" id="guardianUpgrade10">x10</button>
+            <button class="purchase-button" id="guardianUpgradeMax">MAX</button>
+          </div>
+        </div>
+      </article>
+
+      <button class="reset-button" id="resetSave">RESET SAVE</button>
+    </section>
+  </main>
+
+  <div class="clear-overlay" id="clearOverlay" hidden>
+    <div class="clear-card">
+      <span class="clear-kicker">MILESTONE REACHED</span>
+      <div class="clear-emblem">10</div>
+      <h1>v0.1 Clear!</h1>
+      <p>You defeated the Stage 10 Boss.<br>The climb can continue.</p>
+      <button id="continueButton">CONTINUE</button>
+    </div>
+  </div>
+
+  <script src="balance.js"></script>
+  <script src="storage.js"></script>
+  <script src="game.js"></script>
+  <script src="ui.js"></script>
+</body>
+</html>
