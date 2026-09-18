@@ -16,7 +16,8 @@ const http = require('node:http');
       const game = LutieClicker.game;
       game.stop();
       const seed = JSON.parse(game.exportSave());
-      seed.stage = 9;
+      seed.stage = 10;
+      seed.balloonChallenge = null;
       seed.progression = { ...seed.progression, farmingBeforeBoss: true, bossRetryAvailable: true, pendingBossStage: 10, pendingEncounterType: 'regionBoss' };
       seed.guardians[0].discovered = seed.guardians[0].activeThisRun = seed.guardians[0].unlocked = true;
       seed.guardians[0].level = 20;
@@ -36,7 +37,8 @@ const http = require('node:http');
         const game = LutieClicker.game;
         const seed = JSON.parse(game.exportSave());
         seed.gold = 9000; seed.bagLevel = 1;
-        seed.stage = 9;
+        seed.stage = 10;
+      seed.balloonChallenge = null;
         seed.progression = { ...seed.progression, farmingBeforeBoss: true, bossRetryAvailable: true, pendingBossStage: 10, pendingEncounterType: 'regionBoss' };
         seed.monster = { type: 'normal', hp: 10 };
         seed.guardians.forEach((g, i) => Object.assign(g, { discovered: true, activeThisRun: true, unlocked: true, level: 1, acquisitionOrder: i + 1 }));
@@ -87,7 +89,8 @@ const http = require('node:http');
         await page.evaluate(() => {
           const game = LutieClicker.game;
           const seed = JSON.parse(game.exportSave());
-          seed.stage = 9;
+          seed.stage = 10;
+      seed.balloonChallenge = null;
           seed.progression = { ...seed.progression, farmingBeforeBoss: true, bossRetryAvailable: true, pendingBossStage: 10, pendingEncounterType: 'regionBoss' };
           seed.monster = { type: 'normal', hp: 10 };
           seed.guardians[0].level = 20;
@@ -105,7 +108,8 @@ const http = require('node:http');
     await page.evaluate(() => {
       const game = LutieClicker.game;
       const seed = JSON.parse(game.exportSave());
-      seed.stage = 9;
+      seed.stage = 10;
+      seed.balloonChallenge = null;
       seed.progression = { ...seed.progression, farmingBeforeBoss: true, bossRetryAvailable: true, pendingBossStage: 10, pendingEncounterType: 'regionBoss' };
       seed.monster = { type: 'normal', hp: 10 };
       seed.guardians.forEach(g => { g.activeThisRun = false; });
@@ -116,6 +120,86 @@ const http = require('node:http');
     assert.equal(await page.locator('#giveUpBoss').isVisible(), true);
     await page.click('#giveUpBoss');
     assert.equal(await page.locator('#challengeBoss').isVisible(), true);
+
+    for (const width of [320, 430]) {
+      await page.setViewportSize({ width, height: 740 });
+      await page.evaluate(() => {
+        const game = LutieClicker.game; game.stop();
+        const seed = JSON.parse(game.exportSave());
+        seed.stage = 10; seed.killsInStage = 0; seed.balloonChallenge = null;
+        seed.progression = { ...seed.progression, farmingBeforeBoss: false, bossRetryAvailable: false, pendingBossStage: null, pendingEncounterType: null };
+        seed.settings.language = 'en'; seed.settings.hitAnimations = false;
+        seed.guardians[0].activeThisRun = seed.guardians[0].discovered = seed.guardians[0].unlocked = true;
+        seed.gold = 123456789012345; seed.bagLevel = 25; seed.lutie.level = 100;
+        seed.monster = { type: 'normal', hp: 35 };
+        game.importSave(JSON.stringify(seed));
+      });
+      assert.equal(await page.locator('#killCount').innerText(), 'MONSTER 1 / 10');
+      assert.equal(await page.locator('#goldValue').innerText(), '123,456,789,012,345');
+      const formats = await page.evaluate(() => ({ gold: LutieClicker.formatGold(12438291), combat: LutieClicker.formatNumber(12438291) }));
+      assert.equal(formats.gold, '12,438,291');
+      assert.match(formats.combat, /M$/);
+      await page.click('[data-tab="settings"]');
+      const numericBefore = await page.evaluate(() => ({ gold: LutieClicker.game.getState().gold, stage: LutieClicker.game.getState().stage, dps: LutieClicker.game.getTotalDps(), tap: LutieClicker.game.getTotalTap() }));
+      await page.selectOption('#language', 'ko');
+      const numericAfter = await page.evaluate(() => ({ gold: LutieClicker.game.getState().gold, stage: LutieClicker.game.getState().stage, dps: LutieClicker.game.getTotalDps(), tap: LutieClicker.game.getTotalTap() }));
+      assert.deepEqual(numericAfter, numericBefore);
+      assert.equal(await page.locator('html').getAttribute('lang'), 'ko');
+      assert.equal(await page.locator('[data-tab="guardian"]').innerText(), '가디언');
+      assert.match(await page.locator('#saveNow').innerText(), /지금 저장/);
+      assert.equal(await page.locator('#killCount').innerText(), '몬스터 1 / 10');
+      await page.click('[data-tab="lutie"]');
+      assert.match(await page.locator('#bagLevel').innerText(), /가방 레벨/);
+      for (const tab of ['lutie','guardian','stone','star','settings']) {
+        await page.click(`[data-tab="${tab}"]`);
+        const overflow = await page.locator(`[data-panel="${tab}"]`).evaluate(el => el.scrollWidth > el.clientWidth);
+        assert.equal(overflow, false, `No ${tab} horizontal overflow at ${width}px with full Gold`);
+      }
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      await page.click('[data-tab="guardian"]');
+      await page.locator('[data-open-stone-picker]').first().click();
+      assert.equal(await page.locator('#closeStonePicker').innerText(), '닫기');
+      assert.match(await page.locator('#stonePickerList').innerText(), /장착|없음/);
+      await page.click('#closeStonePicker');
+      await page.evaluate(() => {
+        const game = LutieClicker.game;
+        const seed = JSON.parse(game.exportSave()); seed.killsInStage = 8; seed.monster = { type: 'normal', hp: 1 };
+        game.importSave(JSON.stringify(seed));
+      });
+      assert.equal(await page.locator('#killCount').innerText(), '몬스터 9 / 10');
+      await page.evaluate(() => LutieClicker.game.attack());
+      assert.equal(await page.locator('#killCount').innerText(), '지역 보스 · 10 / 10');
+      await page.evaluate(() => LutieClicker.game.attack());
+      assert.equal(await page.locator('#clearOverlay').count(), 0);
+      assert.equal(await page.evaluate(() => LutieClicker.game.getState().stage), 11);
+      assert.equal(await page.locator('#stoneAcquisitionOverlay').isVisible(), true);
+      // Test Nazar at nonlethal damage with the real render path.
+      await page.evaluate(() => {
+        const game = LutieClicker.game;
+        const seed = JSON.parse(game.exportSave()); seed.stage = 10; seed.lutie.level = 1;
+        seed.monster = { type: 'normal', hp: 35 };
+        seed.progression = { ...seed.progression, farmingBeforeBoss: true, bossRetryAvailable: true, pendingBossStage: 10, pendingEncounterType: 'regionBoss' };
+        game.importSave(JSON.stringify(seed)); game.forceNazar();
+      });
+      const nazarHp = await page.evaluate(() => LutieClicker.game.getState().monster.hp);
+      await page.evaluate(() => LutieClicker.game.attack());
+      assert.ok(await page.evaluate(() => LutieClicker.game.getState().monster.hp) < nazarHp);
+      assert.equal(await page.locator('#hpValue').innerText(), '??? / ???');
+      assert.equal(await page.locator('#hpFill').evaluate(el => el.style.width), '100%');
+      await page.evaluate(() => {
+        LutieClicker.game.saveNow();
+        document.querySelector('#acquisitionOverlay').hidden = true;
+        document.querySelector('#stoneAcquisitionOverlay').hidden = true;
+        document.querySelector('#toast').hidden = true;
+      });
+      await page.click('[data-tab="lutie"]');
+      if (process.env.SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, `v031-ko-${width}.png`) });
+      await page.reload();
+      await page.evaluate(() => LutieClicker.game.stop());
+      assert.equal(await page.locator('html').getAttribute('lang'), 'ko');
+      assert.equal(await page.evaluate(() => LutieClicker.game.getState().settings.language), 'ko');
+      console.log(`Korean ${width}px: localization/persistence, exact Gold, counters, Nazar hidden bar and no clear dialog passed`);
+    }
 
     // Serve under a real project prefix to catch assumptions hidden by file://.
     const root = path.resolve(__dirname, '..');
@@ -129,7 +213,7 @@ const http = require('node:http');
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     try {
       await page.goto(`http://127.0.0.1:${server.address().port}/lutie-project/`);
-      assert.equal(await page.evaluate(() => LutieClicker.game.getState().saveVersion), 5);
+      assert.equal(await page.evaluate(() => LutieClicker.game.getState().saveVersion), 6);
       await page.evaluate(() => LutieClicker.game.stop());
       assert.equal(await page.locator('.bottom-nav button').count(), 5);
       console.log('Project-prefix HTTP boot passed');

@@ -4,55 +4,55 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17122a">
-  <title>Lutie-like RPG Clicker v0.3</title>
+  <title>Lutie-like RPG Clicker v0.3.1</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <main class="game-shell">
     <header class="top-bar">
-      <div class="brand"><span class="brand-mark">L</span><span>LUTIE<br><small>CLICKER v0.3</small></span></div>
-      <div class="resource"><span>STAGE</span><strong id="stageValue">1</strong></div>
-      <div class="resource gold"><span>GOLD / CAPACITY</span><strong id="goldValue">0</strong><small id="goldCapacity">/ 10K</small></div>
+      <div class="brand"><span class="brand-mark">L</span><span>LUTIE<br><small>CLICKER v0.3.1</small></span></div>
+      <div class="resource"><span data-i18n="STAGE">STAGE</span><strong id="stageValue">1</strong></div>
+      <div class="resource gold"><span data-i18n="GOLD / CAPACITY">GOLD / CAPACITY</span><strong id="goldValue">0</strong><small id="goldCapacity">/ 10,000</small></div>
     </header>
 
-    <section class="arena" id="attackArea" aria-label="Attack area">
+    <section class="arena" id="attackArea" aria-label="Attack area" data-i18n-aria="Attack area">
       <div class="arena-glow"></div>
       <div class="encounter-badge" id="encounterBadge" hidden>REGION BOSS</div>
       <div class="monster-meta">
         <div><small id="stageLabel">STAGE 1</small><span class="monster-name" id="monsterName">Mossling</span></div>
-        <span class="kill-count" id="killCount">MONSTER 0 / 10</span>
+        <span class="kill-count" id="killCount">MONSTER 1 / 10</span>
       </div>
       <div class="hp-wrap">
-        <div class="hp-copy"><span>HP</span><strong id="hpValue">10 / 10</strong></div>
+        <div class="hp-copy"><span data-i18n="HP">HP</span><strong id="hpValue">10 / 10</strong></div>
         <div class="hp-track"><div class="hp-fill" id="hpFill"></div></div>
-        <div class="nazar-indicator" id="nazarIndicator" role="status" hidden><i aria-hidden="true"></i><span>NAZAR</span></div>
+        <div class="nazar-indicator" id="nazarIndicator" role="status" hidden><i aria-hidden="true"></i><span data-i18n="NAZAR">NAZAR</span></div>
       </div>
-      <div class="boss-timer" id="bossTimerWrap" hidden><span>TIME</span><strong id="bossTimerValue">30.0</strong></div>
-      <button class="give-up-button" id="giveUpBoss" data-no-attack hidden>GIVE UP</button>
+      <div class="boss-timer" id="bossTimerWrap" hidden><span data-i18n="TIME">TIME</span><strong id="bossTimerValue">30.0</strong></div>
+      <button class="give-up-button" id="giveUpBoss" data-no-attack hidden data-i18n="GIVE UP">GIVE UP</button>
       <div class="farming-banner" id="farmingBanner" data-no-attack hidden>
-        <div><strong>BOSS FAILED</strong><span id="farmingStage">FARMING STAGE 9</span><small id="nextBossHp">NEXT BOSS HP: 0</small></div>
-        <button id="challengeBoss" data-no-attack>CHALLENGE BOSS</button>
+        <div><strong data-i18n="BOSS FAILED">BOSS FAILED</strong><span id="farmingStage">FARMING STAGE 9</span><small id="nextBossHp">NEXT BOSS HP: 0</small></div>
+        <button id="challengeBoss" data-no-attack data-i18n="CHALLENGE BOSS">CHALLENGE BOSS</button>
       </div>
-      <button class="monster-button" id="monsterButton" aria-label="Attack monster">
+      <button class="monster-button" id="monsterButton" aria-label="Attack monster" data-i18n-aria="Attack monster">
         <span class="monster-shadow"></span>
         <span class="monster-body"><span class="monster-eye left"></span><span class="monster-eye right"></span><span class="monster-mouth"></span></span>
       </button>
-      <p class="tap-hint">TAP OR PRESS SPACE · Z · X · ENTER</p>
+      <p class="tap-hint" data-i18n="TAP OR PRESS SPACE · Z · X · ENTER">TAP OR PRESS SPACE · Z · X · ENTER</p>
       <div class="damage-layer" id="damageLayer" aria-hidden="true"></div>
     </section>
 
-    <section class="combat-stats" aria-label="Combat stats">
-      <div><span>TAP</span><strong id="tapStat">1</strong></div>
+    <section class="combat-stats" aria-label="Combat stats" data-i18n-aria="Combat stats">
+      <div><span data-i18n="TAP">TAP</span><strong id="tapStat">1</strong></div>
       <i></i>
-      <div><span>TOTAL DPS</span><strong id="dpsStat">1</strong></div>
+      <div><span data-i18n="TOTAL DPS">TOTAL DPS</span><strong id="dpsStat">1</strong></div>
     </section>
 
     <section class="tab-panels">
       <section class="tab-panel active" id="tab-lutie" data-panel="lutie">
-        <div class="section-title"><div><small>HERO</small><h2>Lutie</h2></div><span class="level" id="lutieLevel">LV. 1</span></div>
+        <div class="section-title"><div><small data-i18n="HERO">HERO</small><h2>Lutie</h2></div><span class="level" id="lutieLevel">LV. 1</span></div>
         <div class="summary-grid">
-          <div><span>TAP DAMAGE</span><strong id="lutieTap">1</strong></div>
-          <div><span>NEXT COST</span><strong class="coin-value" id="lutieCost">10</strong></div>
+          <div><span data-i18n="TAP DAMAGE">TAP DAMAGE</span><strong id="lutieTap">1</strong></div>
+          <div><span data-i18n="NEXT COST">NEXT COST</span><strong class="coin-value" id="lutieCost">10</strong></div>
         </div>
         <div class="purchase-row">
           <button class="purchase-button" id="lutieUpgrade">+1</button>
@@ -64,91 +64,90 @@
           <button class="purchase-button" id="upgradeBag">UPGRADE BAG · 5,000 G</button>
         </div>
         <details class="offline-summary" id="offlineSummary" hidden open>
-          <summary>OFFLINE PROGRESS</summary><small>Temporary automatic-DPS prototype</small><dl id="offlineDetails"></dl>
+          <summary data-i18n="OFFLINE PROGRESS">OFFLINE PROGRESS</summary><small data-i18n="Temporary automatic-DPS prototype">Temporary automatic-DPS prototype</small><dl id="offlineDetails"></dl>
         </details>
-        <div class="subsection-heading"><span>ACTIVE SKILLS</span><small>Temporary reconstruction</small></div>
+        <div class="subsection-heading"><span data-i18n="ACTIVE SKILLS">ACTIVE SKILLS</span><small data-i18n="Temporary reconstruction">Temporary reconstruction</small></div>
         <div class="skill-grid" id="skillGrid"></div>
       </section>
 
       <section class="tab-panel" id="tab-guardian" data-panel="guardian" hidden>
-        <div class="section-title"><div><small>ROSTER</small><h2>Guardians</h2></div><div class="guardian-resources"><div class="total-chip gold-chip"><span>CURRENT GOLD</span><strong id="guardianGold">0</strong></div><div class="total-chip"><span>TOTAL DPS</span><strong id="guardianTotalDps">0</strong></div></div></div>
-        <label class="roster-sort"><span>SORT</span><select id="guardianSort"><option value="ACQUIRED">ACQUIRED</option><option value="NAME">NAME</option><option value="GROUP">GROUP</option></select></label>
+        <div class="section-title"><div><small data-i18n="ROSTER">ROSTER</small><h2 data-i18n="Guardians">Guardians</h2></div><div class="guardian-resources"><div class="total-chip gold-chip"><span data-i18n="CURRENT GOLD">CURRENT GOLD</span><strong id="guardianGold">0</strong></div><div class="total-chip"><span data-i18n="TOTAL DPS">TOTAL DPS</span><strong id="guardianTotalDps">0</strong></div></div></div>
+        <label class="roster-sort"><span data-i18n="SORT">SORT</span><select id="guardianSort"><option value="ACQUIRED" data-i18n="ACQUIRED">ACQUIRED</option><option value="NAME" data-i18n="NAME">NAME</option><option value="GROUP" data-i18n="GROUP">GROUP</option></select></label>
         <div class="all-upgrades"><button class="purchase-button" id="allGuardian1">ALL +1</button><button class="purchase-button" id="allGuardian10">ALL +10</button></div>
         <div class="guardian-list" id="guardianList"></div>
       </section>
 
       <section class="tab-panel" id="tab-stone" data-panel="stone" hidden>
-        <div class="section-title"><div><small>INVENTORY</small><h2>Mana Stones</h2></div><span class="level" id="stoneCount">0 STONES</span></div>
-        <p class="panel-note">Stone power is capped by the current Stage. One stone can be equipped to one Guardian.</p>
+        <div class="section-title"><div><small data-i18n="INVENTORY">INVENTORY</small><h2 data-i18n="Mana Stones">Mana Stones</h2></div><span class="level" id="stoneCount">0 STONES</span></div>
+        <p class="panel-note" data-i18n="Stone power is capped by the current Stage. One stone can be equipped to one Guardian.">Stone power is capped by the current Stage. One stone can be equipped to one Guardian.</p>
         <div class="stone-list" id="stoneList"></div>
       </section>
 
       <section class="tab-panel" id="tab-star" data-panel="star" hidden>
-        <div class="section-title"><div><small>PERMANENT PROGRESS</small><h2>Stars</h2></div><strong class="stars-value" id="starsValue">0 ★</strong></div>
+        <div class="section-title"><div><small data-i18n="PERMANENT PROGRESS">PERMANENT PROGRESS</small><h2 data-i18n="Stars">Stars</h2></div><strong class="stars-value" id="starsValue">0 ★</strong></div>
         <div class="reincarnate-card">
-          <div><span>STARS IF REINCARNATING NOW</span><strong id="starsPreview">+1</strong></div>
+          <div><span data-i18n="STARS IF REINCARNATING NOW">STARS IF REINCARNATING NOW</span><strong id="starsPreview">+1</strong></div>
           <button id="reincarnateButton" disabled>REINCARNATE · LV 200</button>
         </div>
-        <div class="subsection-heading"><span>ARTIFACTS</span><small>Permanent placeholder bonuses</small></div>
+        <div class="subsection-heading"><span data-i18n="ARTIFACTS">ARTIFACTS</span><small data-i18n="Permanent placeholder bonuses">Permanent placeholder bonuses</small></div>
         <div class="artifact-list" id="artifactList"></div>
       </section>
 
       <section class="tab-panel" id="tab-settings" data-panel="settings" hidden>
-        <div class="section-title"><div><small>LOCAL DATA</small><h2>Settings</h2></div></div>
+        <div class="section-title"><div><small data-i18n="LOCAL DATA">LOCAL DATA</small><h2 data-i18n="Settings">Settings</h2></div></div>
         <div class="settings-list">
-          <button id="saveNow">SAVE NOW<span>Write current state</span></button>
-          <button id="exportSave">EXPORT SAVE<span>Download JSON</span></button>
-          <button id="importSave">IMPORT SAVE<span>Choose JSON file</span></button>
+          <label><span data-i18n="LANGUAGE">LANGUAGE</span><select id="language"><option value="en">English</option><option value="ko">한국어</option></select></label>
+          <button id="saveNow"><span data-i18n="SAVE NOW">SAVE NOW</span><span data-i18n="Write current state">Write current state</span></button>
+          <button id="exportSave"><span data-i18n="EXPORT SAVE">EXPORT SAVE</span><span data-i18n="Download JSON">Download JSON</span></button>
+          <button id="importSave"><span data-i18n="IMPORT SAVE">IMPORT SAVE</span><span data-i18n="Choose JSON file">Choose JSON file</span></button>
           <input type="file" id="importFile" accept="application/json,.json" hidden>
-          <label><span>DAMAGE NUMBERS</span><input type="checkbox" id="damageNumbers" checked></label>
-          <label><span>HIT ANIMATION</span><input type="checkbox" id="hitAnimations" checked></label>
-          <button class="danger" id="resetSave">RESET SAVE<span>Erase all progress</span></button>
+          <label><span data-i18n="DAMAGE NUMBERS">DAMAGE NUMBERS</span><input type="checkbox" id="damageNumbers" checked></label>
+          <label><span data-i18n="HIT ANIMATION">HIT ANIMATION</span><input type="checkbox" id="hitAnimations" checked></label>
+          <button class="danger" id="resetSave"><span data-i18n="RESET SAVE">RESET SAVE</span><span data-i18n="Erase all progress">Erase all progress</span></button>
         </div>
         <details class="developer-info">
-          <summary>Developer Info</summary>
+          <summary data-i18n="Developer Info">Developer Info</summary>
           <dl id="developerInfo"></dl>
-          <button class="developer-action" id="forceNazar" disabled>FORCE NAZAR</button>
+          <button class="developer-action" id="forceNazar" disabled data-i18n="FORCE NAZAR">FORCE NAZAR</button>
           <small id="forceNazarHint">Available while farming</small>
-          <button class="developer-action gold-action" id="addDeveloperGold">+100K GOLD</button>
-          <small>DEV ONLY · bypasses Bag capacity</small>
-          <button class="developer-action" id="forceBalloon">FORCE BALLOON</button>
-          <small>DEV ONLY · skips 10 stages without rewards</small>
-          <button class="developer-action" id="developerOffline">+1H OFFLINE</button>
+          <button class="developer-action gold-action" id="addDeveloperGold" data-i18n="+100,000 GOLD">+100,000 GOLD</button>
+          <small data-i18n="DEV ONLY · bypasses Bag capacity">DEV ONLY · bypasses Bag capacity</small>
+          <button class="developer-action" id="forceBalloon" data-i18n="FORCE BALLOON">FORCE BALLOON</button>
+          <small data-i18n="DEV ONLY · challenge the next Region Boss">DEV ONLY · challenge the next Region Boss</small>
+          <button class="developer-action" id="developerOffline" data-i18n="+1H OFFLINE">+1H OFFLINE</button>
         </details>
       </section>
     </section>
 
-    <nav class="bottom-nav" aria-label="Game sections">
-      <button class="active" data-tab="lutie"><i class="nav-hero"></i><span>LUTIE</span></button>
-      <button data-tab="guardian"><i class="nav-guardian"></i><span>GUARDIAN</span></button>
-      <button data-tab="stone"><i class="nav-stone"></i><span>MANA STONE</span></button>
-      <button data-tab="star"><i class="nav-star"></i><span>STAR</span></button>
-      <button data-tab="settings"><i class="nav-settings"></i><span>SETTINGS</span></button>
+    <nav class="bottom-nav" aria-label="Game sections" data-i18n-aria="Game sections">
+      <button class="active" data-tab="lutie"><i class="nav-hero"></i><span data-i18n="LUTIE">LUTIE</span></button>
+      <button data-tab="guardian"><i class="nav-guardian"></i><span data-i18n="GUARDIAN">GUARDIAN</span></button>
+      <button data-tab="stone"><i class="nav-stone"></i><span data-i18n="MANA STONE">MANA STONE</span></button>
+      <button data-tab="star"><i class="nav-star"></i><span data-i18n="STAR">STAR</span></button>
+      <button data-tab="settings"><i class="nav-settings"></i><span data-i18n="SETTINGS">SETTINGS</span></button>
     </nav>
   </main>
 
   <div class="modal-overlay" id="reincarnateModal" hidden>
-    <div class="modal-card"><span class="modal-kicker">PERMANENT RESET</span><h2>Reincarnate?</h2><p>Gold, stages and levels reset. Bag, Stars, Artifacts and Legendary Stones stay.<br>You will receive <strong id="modalStars">1 Star</strong>.</p><div><button id="cancelReincarnate">CANCEL</button><button class="confirm" id="confirmReincarnate">REINCARNATE</button></div></div>
-  </div>
-  <div class="modal-overlay" id="clearOverlay" hidden>
-    <div class="modal-card clear-card"><span class="modal-kicker">MILESTONE REACHED</span><div class="clear-emblem">10</div><h2>v0.1 Clear!</h2><p>You defeated the Stage 10 Region Boss.<br>The reconstruction continues.</p><div><button class="confirm" id="continueButton">CONTINUE</button></div></div>
+    <div class="modal-card"><span class="modal-kicker" data-i18n="PERMANENT RESET">PERMANENT RESET</span><h2 data-i18n="Reincarnate?">Reincarnate?</h2><p><span data-i18n="Gold, stages and levels reset. Bag, Stars, Artifacts and Legendary Stones stay.">Gold, stages and levels reset. Bag, Stars, Artifacts and Legendary Stones stay.</span><br><span data-i18n="You will receive">You will receive</span> <strong id="modalStars">1 Star</strong>.</p><div><button id="cancelReincarnate" data-i18n="CANCEL">CANCEL</button><button class="confirm" id="confirmReincarnate" data-i18n="REINCARNATE">REINCARNATE</button></div></div>
   </div>
   <div class="modal-overlay stone-picker-overlay" id="stonePicker" hidden role="dialog" aria-modal="true" aria-labelledby="stonePickerTitle">
     <div class="modal-card stone-picker-card">
-      <span class="modal-kicker">SELECT MANA STONE</span>
+      <span class="modal-kicker" data-i18n="SELECT MANA STONE">SELECT MANA STONE</span>
       <h2 id="stonePickerTitle">Guardian</h2>
       <div class="stone-picker-list" id="stonePickerList"></div>
-      <div><button id="closeStonePicker">CLOSE</button></div>
+      <div><button id="closeStonePicker" data-i18n="CLOSE">CLOSE</button></div>
     </div>
   </div>
-  <div class="acquisition-overlay" id="acquisitionOverlay" hidden><small>NEW GUARDIAN</small><strong id="acquisitionName">Guardian 01</strong><span id="acquisitionDps">DPS +2</span></div>
-  <div class="acquisition-overlay stone-acquisition" id="stoneAcquisitionOverlay" hidden><small>MANA STONE ACQUIRED</small><strong id="stoneAcquisitionName">Lv10 NORMAL</strong><span id="stoneAcquisitionPower">Power +0.5%/Lv</span></div>
+  <div class="acquisition-overlay" id="acquisitionOverlay" hidden><small data-i18n="NEW GUARDIAN">NEW GUARDIAN</small><strong id="acquisitionName">Guardian 01</strong><span id="acquisitionDps">DPS +2</span></div>
+  <div class="acquisition-overlay stone-acquisition" id="stoneAcquisitionOverlay" hidden><small data-i18n="MANA STONE ACQUIRED">MANA STONE ACQUIRED</small><strong id="stoneAcquisitionName">Lv10 NORMAL</strong><span id="stoneAcquisitionPower">Power +0.5%/Lv</span></div>
   <div class="toast" id="toast" hidden></div>
 
   <script src="./balance.js"></script>
   <script src="./data.js"></script>
   <script src="./storage.js"></script>
   <script src="./game.js"></script>
+  <script src="./i18n.js"></script>
   <script src="./ui.js"></script>
 </body>
 </html>

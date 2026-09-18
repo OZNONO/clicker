@@ -11,6 +11,10 @@
     let running = false;
     let offlineMode = false;
     let offlineSummary = null;
+    let lastAutoAt = null;
+    let processingAuto = false;
+    let autoDisplayDamage = 0;
+    let autoDisplayElapsed = 0;
 
     const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -46,6 +50,7 @@
         gold: 0,
         bagLevel: 1,
         lastSavedAt: null,
+        balloonChallenge: null,
         stage: 1,
         killsInStage: 0,
         lutie: { level: 1 },
@@ -57,7 +62,7 @@
         run: { highestStage: 1, encounteredGuardianIds: [], nazarEscalation: 0 },
         lifetime: { highestStage: 1, totalReincarnations: 0, nextStoneId: 1, nextGuardianAcquisitionOrder: 1 },
         skills: { flareRayReadyAt: 0 },
-        settings: { damageNumbers: true, hitAnimations: true, guardianSort: "ACQUIRED" },
+        settings: { damageNumbers: true, hitAnimations: true, guardianSort: "ACQUIRED", language: "en" },
         boss: { timeRemainingMs: null, deadlineAt: null },
         monster: createMonster("normal", 1)
       };
@@ -134,6 +139,7 @@
         migrated.run.encounteredGuardianIds.push(migrated.guardians[0].id);
       }
       migrated.boss = { ...migrated.boss, ...(saved.boss || {}) };
+      if (!migrated.progression.farmingBeforeBoss && Balance.isRegionBossStage(migrated.stage)) migrated.killsInStage = Balance.constants.MONSTERS_PER_STAGE - 1;
       migrated.monster = createMonsterForState(migrated);
       if (saved.monster && migrated.monster.type === monsterTypeFromLegacy(saved.monster, migrated.stage)) {
         migrated.monster.hp = Math.max(1, Math.min(validNumber(saved.monster.hp, migrated.monster.maxHp), migrated.monster.maxHp));
@@ -157,12 +163,18 @@
     }
 
     function createMonsterForState(target) {
-      const type = target.progression.farmingBeforeBoss ? "normal" : encounterTypeForStage(target.stage)
-        || (target.killsInStage >= Balance.constants.MONSTERS_PER_STAGE - 1 ? "stageBoss" : "normal");
+      const type = mainEncounterType(target);
       const guardianId = type === "guardian"
         ? target.progression.pendingGuardianId || GameData.GUARDIAN_DEFINITIONS[0].id
         : null;
       return createMonster(type, target.stage, { guardianId });
+    }
+
+    function mainEncounterType(target) {
+      if (target.progression.farmingBeforeBoss) return "normal";
+      if (Balance.isGuardianEncounterStage(target.stage)) return "guardian";
+      if (target.killsInStage < Balance.constants.MONSTERS_PER_STAGE - 1) return "normal";
+      return Balance.isRegionBossStage(target.stage) ? "regionBoss" : "stageBoss";
     }
 
     function normalizeV2(saved) {
@@ -208,6 +220,7 @@
       });
       next.lifetime.nextGuardianAcquisitionOrder = Math.max(validNumber(next.lifetime.nextGuardianAcquisitionOrder, 1), nextAcquisitionOrder);
       if (!["ACQUIRED", "NAME", "GROUP"].includes(next.settings.guardianSort)) next.settings.guardianSort = "ACQUIRED";
+      if (!["en", "ko"].includes(next.settings.language)) next.settings.language = "en";
       next.manaStones = Array.isArray(saved.manaStones) ? saved.manaStones.filter(isValidStone).map((stone) => ({
         id: stone.id,
         level: Math.max(1, stone.level),
@@ -241,7 +254,7 @@
       try {
         let next;
         if (saved.saveVersion === 1) next = migrateV1(saved);
-        if ([2, 3, 4, Balance.constants.SAVE_VERSION].includes(saved.saveVersion)) next = normalizeV2(saved);
+        if ([2, 3, 4, 5, Balance.constants.SAVE_VERSION].includes(saved.saveVersion)) next = normalizeV2(saved);
         if (next) {
           next.saveVersion = Balance.constants.SAVE_VERSION;
           next.bagLevel = Math.max(1, Math.floor(validNumber(saved.bagLevel, 1)));
@@ -251,6 +264,18 @@
             while (next.gold > Balance.bagCapacity(next.bagLevel)) next.bagLevel += 1;
           }
           next.lastSavedAt = Number.isFinite(saved.lastSavedAt) && saved.lastSavedAt >= 0 ? saved.lastSavedAt : null;
+          next.balloonChallenge = normalizeBalloon(saved.balloonChallenge, next);
+          if (next.balloonChallenge) {
+            next.run.highestStage = Math.max(next.balloonChallenge.resume.stage, validNumber(saved.run && saved.run.highestStage, 1));
+            next.lifetime.highestStage = Math.max(next.run.highestStage, validNumber(saved.lifetime && saved.lifetime.highestStage, 1));
+          }
+          if (next.monster.type === "regionBoss") next.killsInStage = Balance.constants.MONSTERS_PER_STAGE - 1;
+          if (next.progression.farmingBeforeBoss && next.progression.pendingEncounterType === "regionBoss") {
+            const moved = next.stage !== next.progression.pendingBossStage;
+            next.stage = next.progression.pendingBossStage;
+            next.killsInStage = Balance.constants.MONSTERS_PER_STAGE - 2;
+            if (moved) next.monster = createMonster("normal", next.stage);
+          }
           return next;
         }
       } catch (_error) {
@@ -263,9 +288,25 @@
       return stone && typeof stone.id === "string" && Number.isFinite(stone.level) && ["NORMAL", "HIGH", "LEGENDARY"].includes(stone.rarity);
     }
 
+    function normalizeBalloon(saved, target) {
+      if (!saved || saved.targetStage !== target.stage || target.monster.type !== "regionBoss" || !Balance.isRegionBossStage(saved.targetStage)) return null;
+      const resume = saved.resume;
+      if (!resume || !Number.isInteger(resume.stage) || resume.stage < 1 || resume.stage > saved.targetStage
+        || saved.targetStage - resume.stage > Balance.constants.REGION_LENGTH || !resume.monster
+        || !["normal", "stageBoss", "guardian", "regionBoss", "mimic", "nazar"].includes(resume.monster.type)
+        || !Number.isFinite(resume.monster.hp) || resume.monster.hp <= 0) return null;
+      return { targetStage: saved.targetStage, resume: {
+        stage: resume.stage, killsInStage: Math.max(0, Math.min(9, Math.floor(validNumber(resume.killsInStage, 0)))),
+        monster: { type: resume.monster.type, hp: resume.monster.hp, guardianId: resume.monster.guardianId || null },
+        progression: { ...initialProgression(), ...(resume.progression || {}) },
+        nazarEscalation: Math.max(0, validNumber(resume.nazarEscalation, 0)),
+        timeRemainingMs: Number.isFinite(resume.timeRemainingMs) ? Math.max(0, resume.timeRemainingMs) : null
+      } };
+    }
+
     function isImportCandidate(candidate) {
       return candidate && typeof candidate === "object"
-        && [1, 2, 3, 4, Balance.constants.SAVE_VERSION].includes(candidate.saveVersion)
+        && [1, 2, 3, 4, 5, Balance.constants.SAVE_VERSION].includes(candidate.saveVersion)
         && Number.isFinite(candidate.gold)
         && Number.isFinite(candidate.stage)
         && candidate.lutie && Number.isFinite(candidate.lutie.level);
@@ -278,6 +319,7 @@
         gold: state.gold,
         bagLevel: state.bagLevel,
         lastSavedAt: state.lastSavedAt,
+        balloonChallenge: clone(state.balloonChallenge),
         stage: state.stage,
         killsInStage: state.killsInStage,
         lutie: { level: state.lutie.level },
@@ -310,7 +352,7 @@
     }
 
     function save() {
-      if (offlineMode) return;
+      if (offlineMode || processingAuto) return;
       const savedAt = Math.max(now(), state.lastSavedAt || 0);
       if (state.monster.isTimed && state.boss.deadlineAt !== null) {
         state.boss.timeRemainingMs = Math.max(0, state.boss.deadlineAt - now());
@@ -449,12 +491,12 @@
     }
 
     function spawnCurrentMain({ allowNazar = true, startTimer = false } = {}) {
-      const encounterType = state.progression.farmingBeforeBoss ? null : encounterTypeForStage(state.stage);
+      const encounterType = mainEncounterType(state);
       if (encounterType === "guardian") {
         state.monster = createMonster("guardian", state.stage, { guardianId: chooseGuardianForEncounter() });
       } else if (encounterType === "regionBoss") {
         state.monster = createMonster("regionBoss", state.stage);
-      } else if (!state.progression.farmingBeforeBoss && state.killsInStage >= Balance.constants.MONSTERS_PER_STAGE - 1) {
+      } else if (encounterType === "stageBoss") {
         state.monster = createMonster("stageBoss", state.stage);
       } else if (!offlineMode && allowNazar && isNazarEligible() && random() < Balance.constants.NAZAR_CHANCE) {
         spawnNazar();
@@ -528,9 +570,18 @@
       if (defeatedMonster.type === "regionBoss") {
         const rarity = !offlineMode && random() < Balance.constants.REGION_BOSS_HIGH_STONE_CHANCE ? "HIGH" : "NORMAL";
         stone = createManaStone(rarity);
-        if (state.stage === Balance.constants.REGION_LENGTH) {
-          state.progression.v01Cleared = true;
-          state.progression.clearSeen = false;
+        if (state.balloonChallenge) {
+          for (let stage = state.balloonChallenge.resume.stage; stage < clearedStage; stage++) {
+            if (!Balance.isGuardianEncounterStage(stage)) continue;
+            const acquiredIds = state.guardians.filter(guardian => guardian.activeThisRun).map(guardian => guardian.id);
+            if (acquiredIds.length === state.guardians.length) continue;
+            const definition = GameData.selectGuardianDefinition(acquiredIds, offlineMode ? 0 : random());
+            acquisition = recruitGuardian(definition.id);
+            if (!state.run.encounteredGuardianIds.includes(definition.id)) state.run.encounteredGuardianIds.push(definition.id);
+          }
+          state.balloonChallenge = null;
+          updateHighestStage();
+          emit("balloonSucceeded", { destination: clearedStage });
         }
       }
       clearEncounterProgression();
@@ -540,18 +591,26 @@
     }
 
     function tryBalloon(clearedStage, forced = false) {
+      if (state.balloonChallenge) return false;
       if (!forced && (state.lifetime.totalReincarnations < 1 || !Balance.isRegionBossStage(clearedStage)
         || random() >= Balance.constants.BALLOON_TRIGGER_CHANCE)) return false;
       const destination = Balance.balloonDestination(clearedStage);
+      const resume = { stage: state.stage, killsInStage: state.killsInStage,
+        monster: { type: state.monster.type, hp: state.monster.hp, guardianId: state.monster.guardianId },
+        progression: clone(state.progression), nazarEscalation: state.run.nazarEscalation, timeRemainingMs: state.boss.timeRemainingMs };
+      state.balloonChallenge = { targetStage: destination, resume };
       clearEncounterProgression();
-      enterStage(destination);
+      state.stage = destination;
+      state.killsInStage = Balance.constants.MONSTERS_PER_STAGE - 1;
+      state.monster = createMonster("regionBoss", destination);
+      beginBossTimer();
       emit("balloon", { destination, forced });
       return true;
     }
 
     function forceBalloon() {
-      // Dev-only: skip ten stages from the current position, with no rewards.
-      tryBalloon(state.stage - 1, true);
+      // Dev-only: challenge the next Region Boss; preserve the exact return encounter.
+      if (!tryBalloon(Math.floor(state.stage / Balance.constants.REGION_LENGTH) * Balance.constants.REGION_LENGTH, true)) return false;
       save();
       return true;
     }
@@ -564,7 +623,7 @@
         reward = addGold(offlineMode ? Balance.monsterGold(state.stage) : rollNormalMonsterGold(Balance.monsterGold(state.stage)));
         state.killsInStage += 1;
         if (state.progression.farmingBeforeBoss) {
-          state.killsInStage %= Balance.constants.MONSTERS_PER_STAGE;
+          state.killsInStage = state.progression.pendingEncounterType === "regionBoss" ? Balance.constants.MONSTERS_PER_STAGE - 2 : state.killsInStage % Balance.constants.MONSTERS_PER_STAGE;
           if (!offlineMode && random() < Balance.constants.MIMIC_CHANCE) state.monster = createMonster("mimic", state.stage);
           else spawnCurrentMain();
         } else if (state.killsInStage >= Balance.constants.MONSTERS_PER_STAGE - 1) {
@@ -591,7 +650,7 @@
     }
 
     function dealDamage(amount, source) {
-      if (state.monster.isTimed && state.boss.deadlineAt !== null && now() >= state.boss.deadlineAt) {
+      if (!processingAuto && state.monster.isTimed && state.boss.deadlineAt !== null && now() >= state.boss.deadlineAt) {
         failBoss();
         return false;
       }
@@ -605,8 +664,8 @@
         rewards = handleDefeat(defeatedMonster);
       }
       save();
-      emit(source === "auto" ? "autoAttack" : source === "skill" ? "skillAttack" : "tap", { amount, defeated, defeatedMonster, ...rewards });
-      if (rewards.acquisition && rewards.acquisition.guardian && rewards.acquisition.isNew) {
+      emit(source === "auto" ? "autoAttack" : source === "skill" ? "skillAttack" : "tap", { amount, defeated, defeatedMonster, smooth: processingAuto, ...rewards });
+      if (rewards.acquisition && rewards.acquisition.guardian && !rewards.acquisition.duplicate) {
         emit("guardianAcquired", {
           guardian: clone(rewards.acquisition.guardian),
           dps: getGuardianFinalDps(rewards.acquisition.guardian),
@@ -623,6 +682,61 @@
 
     function autoAttack() {
       return dealDamage(getTotalDps(), "auto");
+    }
+
+    function automaticTick(timestamp = now()) {
+      if (!running || processingAuto || lastAutoAt === null || timestamp <= lastAutoAt) return false;
+      const elapsed = timestamp - lastAutoAt;
+      let cursor = lastAutoAt;
+      lastAutoAt = timestamp;
+      if (elapsed > Balance.constants.LIVE_CATCHUP_THRESHOLD_MS) {
+        // Resume throttled frames through the existing bounded offline settlement once.
+        applyOfflineProgress(elapsed);
+        save();
+        autoDisplayDamage = autoDisplayElapsed = 0;
+        emit("loaded", { offlineSummary });
+        return true;
+      }
+      processingAuto = true;
+      try {
+        let remaining = elapsed;
+        let encounters = 0;
+        while (remaining > 0 && encounters++ < Balance.constants.OFFLINE_MAX_ENCOUNTERS) {
+          const dps = getTotalDps();
+          if (!Number.isFinite(dps) || dps <= 0) break;
+          const monster = state.monster;
+          const deadline = monster.isTimed ? state.boss.deadlineAt : null;
+          const timeToKill = monster.hp / dps * 1000;
+          const timeToTimeout = deadline === null ? Infinity : Math.max(0, deadline - cursor);
+          const step = Math.min(remaining, timeToKill, timeToTimeout);
+          if (step > 0) {
+            const damage = step === timeToKill ? monster.hp : dps * step / 1000;
+            cursor += step;
+            remaining -= step;
+            dealDamage(damage, "auto");
+            autoDisplayDamage += damage;
+          }
+          if (state.monster !== monster && state.monster.isTimed) state.boss.deadlineAt = cursor + state.boss.timeRemainingMs;
+          if (state.monster === monster && timeToTimeout <= step) {
+            failBoss();
+            if (state.monster.isTimed) state.boss.deadlineAt = cursor + state.boss.timeRemainingMs;
+          }
+          if (step === 0 && state.monster === monster) break;
+        }
+        autoDisplayElapsed += elapsed;
+      } finally { processingAuto = false; }
+      save();
+      if (autoDisplayElapsed >= Balance.constants.AUTO_DAMAGE_DISPLAY_INTERVAL_MS) {
+        // Avoid a 0.9999999999999999 accumulated total displaying as "DPS 0".
+        const displayAmount = Math.abs(autoDisplayDamage - Math.round(autoDisplayDamage)) < 1e-8 ? Math.round(autoDisplayDamage) : autoDisplayDamage;
+        emit("autoDamageDisplay", { amount: displayAmount });
+        autoDisplayDamage = autoDisplayElapsed = 0;
+      }
+      return true;
+    }
+
+    function withLiveTime(action) {
+      return (...args) => { automaticTick(); return action(...args); };
     }
 
     function useFlareRay() {
@@ -730,7 +844,7 @@
             const kills = damage < state.monster.hp ? 0 : 1 + Math.floor((damage - state.monster.hp) / hp);
             if (kills) {
               awardGold(kills * calculateGoldReward(Balance.monsterGold(state.stage)));
-              state.killsInStage = (state.killsInStage + kills) % Balance.constants.MONSTERS_PER_STAGE;
+              state.killsInStage = state.progression.pendingEncounterType === "regionBoss" ? Balance.constants.MONSTERS_PER_STAGE - 2 : (state.killsInStage + kills) % Balance.constants.MONSTERS_PER_STAGE;
               state.monster.hp = hp - ((damage - state.monster.hp) % hp);
             } else state.monster.hp -= damage;
             remaining = 0;
@@ -774,14 +888,33 @@
 
     function failBoss() {
       if (!state.monster.isTimed) return false;
+      if (state.balloonChallenge) {
+        const resume = state.balloonChallenge.resume;
+        state.balloonChallenge = null;
+        clearBossTimerState();
+        state.stage = resume.stage;
+        state.killsInStage = resume.killsInStage;
+        state.progression = clone(resume.progression);
+        state.run.nazarEscalation = resume.nazarEscalation;
+        state.monster = createMonster(resume.monster.type, resume.stage, { guardianId: resume.monster.guardianId, escalation: Math.max(0, state.run.nazarEscalation - 1) });
+        state.monster.hp = Math.min(resume.monster.hp, state.monster.maxHp);
+        if (state.monster.isTimed) {
+          state.boss.timeRemainingMs = resume.timeRemainingMs ?? Balance.timedEncounterLimit(state.stage);
+          state.boss.deadlineAt = now() + state.boss.timeRemainingMs;
+          ensureBossTimer();
+        }
+        save();
+        emit("balloonFailed", { destination: state.stage });
+        return true;
+      }
       const failed = { stage: state.stage, type: state.monster.type, guardianId: state.monster.guardianId };
       state.progression.bossRetryAvailable = true;
       state.progression.farmingBeforeBoss = true;
       state.progression.pendingBossStage = failed.stage;
       state.progression.pendingEncounterType = failed.type;
       if (failed.guardianId) state.progression.pendingGuardianId = failed.guardianId;
-      state.stage = failed.type === "stageBoss" ? failed.stage : Math.max(1, failed.stage - 1);
-      state.killsInStage = 0;
+      state.stage = failed.type === "guardian" ? Math.max(1, failed.stage - 1) : failed.stage;
+      state.killsInStage = failed.type === "regionBoss" ? Balance.constants.MONSTERS_PER_STAGE - 2 : 0;
       clearBossTimerState();
       state.monster = createMonster("normal", state.stage);
       save();
@@ -790,6 +923,7 @@
     }
 
     function bossTimerTick(timestamp = now()) {
+      if (running && !processingAuto) automaticTick(timestamp);
       if (!state.monster.isTimed || state.boss.deadlineAt === null) return;
       state.boss.timeRemainingMs = Math.max(0, state.boss.deadlineAt - timestamp);
       if (state.boss.timeRemainingMs === 0) failBoss();
@@ -799,7 +933,7 @@
     function challengeBoss() {
       if (!state.progression.bossRetryAvailable || !state.progression.pendingBossStage) return false;
       state.stage = state.progression.pendingBossStage;
-      state.killsInStage = state.progression.pendingEncounterType === "stageBoss" ? Balance.constants.MONSTERS_PER_STAGE - 1 : 0;
+      state.killsInStage = state.progression.pendingEncounterType === "guardian" ? 0 : Balance.constants.MONSTERS_PER_STAGE - 1;
       state.progression.bossRetryAvailable = false;
       state.progression.farmingBeforeBoss = false;
       const type = state.progression.pendingEncounterType || encounterTypeForStage(state.stage);
@@ -891,6 +1025,7 @@
       state.killsInStage = 0;
       state.lutie.level = 1;
       state.progression = initialProgression();
+      state.balloonChallenge = null;
       state.run = { highestStage: 1, encounteredGuardianIds: [], nazarEscalation: 0 };
       state.skills.flareRayReadyAt = 0;
       clearBossTimerState();
@@ -914,7 +1049,10 @@
 
     function setSetting(key, value) {
       if (!(key in state.settings)) return false;
-      if (key === "guardianSort") {
+      if (key === "language") {
+        if (!["en", "ko"].includes(value)) return false;
+        state.settings.language = value;
+      } else if (key === "guardianSort") {
         if (!["ACQUIRED", "NAME", "GROUP"].includes(value)) return false;
         state.settings[key] = value;
       } else {
@@ -937,6 +1075,8 @@
       clearInterval(bossTimer);
       bossTimer = null;
       state = initialState();
+      lastAutoAt = now();
+      autoDisplayDamage = autoDisplayElapsed = 0;
       offlineSummary = null;
       save();
       emit("reset");
@@ -964,6 +1104,8 @@
       clearInterval(bossTimer);
       bossTimer = null;
       state = imported;
+      lastAutoAt = now();
+      autoDisplayDamage = autoDisplayElapsed = 0;
       // Imports establish a fresh checkpoint; an old exported timestamp cannot pay twice.
       state.lastSavedAt = now();
       offlineSummary = null;
@@ -998,13 +1140,16 @@
       bossTimer = null;
       state = normalize(storageAdapter.loadGame());
       applyOfflineProgress();
+      lastAutoAt = now();
+      autoDisplayDamage = autoDisplayElapsed = 0;
       restoreActiveTimer();
       save();
-      autoAttackTimer = setInterval(autoAttack, Balance.constants.AUTO_ATTACK_INTERVAL_MS);
+      autoAttackTimer = setInterval(automaticTick, Balance.constants.AUTO_ATTACK_INTERVAL_MS);
       emit("loaded", { offlineSummary });
     }
 
     function stop() {
+      automaticTick();
       if (running) save();
       running = false;
       clearInterval(autoAttackTimer);
@@ -1014,12 +1159,13 @@
     }
 
     return Object.freeze({
-      start, stop, attack, tap: attack, autoAttack, useFlareRay, bossTimerTick, challengeBoss, giveUpBoss, forceNazar, addDeveloperGold,
-      getGoldCapacity, upgradeBag, forceBalloon, getAllGuardianUpgradeQuote, upgradeAllGuardians, simulateDeveloperOffline, getNazarIndicatorState,
-      upgradeLutie, upgradeGuardian, getUpgradeQuote, getTotalTap, getTotalDps, getTotalGuardianDps,
-      getGuardianFinalDps, getEffectiveStoneLevel, calculateGoldReward, rollNormalMonsterGold, isNazarEligible, equipManaStone, unequipManaStone,
-      getReincarnationPreview, reincarnate, upgradeArtifact, setSetting, acknowledgeClear, reset,
-      saveNow, exportSave, importSave, getState, subscribe
+      start, stop, attack: withLiveTime(attack), tap: withLiveTime(attack), autoAttack, automaticTick,
+      useFlareRay: withLiveTime(useFlareRay), bossTimerTick, challengeBoss: withLiveTime(challengeBoss), giveUpBoss: withLiveTime(giveUpBoss), forceNazar: withLiveTime(forceNazar), addDeveloperGold: withLiveTime(addDeveloperGold),
+      getGoldCapacity, upgradeBag: withLiveTime(upgradeBag), forceBalloon: withLiveTime(forceBalloon), getAllGuardianUpgradeQuote, upgradeAllGuardians: withLiveTime(upgradeAllGuardians), simulateDeveloperOffline: withLiveTime(simulateDeveloperOffline), getNazarIndicatorState,
+      upgradeLutie: withLiveTime(upgradeLutie), upgradeGuardian: withLiveTime(upgradeGuardian), getUpgradeQuote, getTotalTap, getTotalDps, getTotalGuardianDps,
+      getGuardianFinalDps, getEffectiveStoneLevel, calculateGoldReward, rollNormalMonsterGold, isNazarEligible, equipManaStone: withLiveTime(equipManaStone), unequipManaStone: withLiveTime(unequipManaStone),
+      getReincarnationPreview, reincarnate: withLiveTime(reincarnate), upgradeArtifact: withLiveTime(upgradeArtifact), setSetting: withLiveTime(setSetting), acknowledgeClear, reset,
+      saveNow: withLiveTime(saveNow), exportSave: withLiveTime(exportSave), importSave, getState, subscribe
     });
   }
 

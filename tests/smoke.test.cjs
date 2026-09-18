@@ -172,12 +172,13 @@ assert.deepEqual(groupView.slice(0, 2).map((guardian) => guardian.group), groupV
 
 // 7-10 and 29-30: Region Boss, timeout, farming, retry, persistence.
 reachStage(game, 10);
+for (let index = 0; index < 9; index++) defeatCurrent(game);
 state = game.getState();
 assert.equal(state.monster.type, "regionBoss", "7. Stage 10 is a Region Boss");
 assert.equal(state.boss.timeRemainingMs, 30000, "8. Region Boss timer starts at 30 seconds");
 game.bossTimerTick(state.boss.deadlineAt);
 state = game.getState();
-assert.equal(state.stage, 9, "9. Timeout returns to the previous farming stage");
+assert.equal(state.stage, 10, "9. Timeout farms the same Region stage");
 assert.equal(state.progression.farmingBeforeBoss, true);
 assert.equal(state.progression.pendingBossStage, 10);
 
@@ -245,13 +246,13 @@ assert.equal(game.getState().manaStones.find((stone) => stone.id === "stone-excl
 
 // 15-16: Nazar eligibility and escalating HP.
 const nazarSeed = JSON.parse(game.exportSave());
-nazarSeed.stage = 9;
+nazarSeed.stage = 10;
 nazarSeed.progression.farmingBeforeBoss = true;
 nazarSeed.progression.bossRetryAvailable = true;
 nazarSeed.progression.pendingBossStage = 10;
 nazarSeed.progression.pendingEncounterType = "regionBoss";
 nazarSeed.run.nazarEscalation = 0;
-nazarSeed.monster = { type: "normal", name: "Mossling", isBoss: false, isTimed: false, guardianId: null, hp: context.Balance.monsterBaseHp(9), maxHp: context.Balance.monsterBaseHp(9) };
+nazarSeed.monster = { type: "normal", name: "Mossling", isBoss: false, isTimed: false, guardianId: null, hp: context.Balance.monsterBaseHp(10), maxHp: context.Balance.monsterBaseHp(10) };
 nazarSeed.guardians.forEach((guardian, index) => { if (index < 2) { guardian.discovered = true; guardian.activeThisRun = true; guardian.unlocked = true; guardian.level = 20; } });
 const nazarRolls = [0.99, 0, 0];
 const nazarGame = createStartedGame(new MemoryAdapter(nazarSeed), { random: () => nazarRolls.length ? nazarRolls.shift() : 0, now: () => clock });
@@ -279,8 +280,8 @@ assert.equal(context.Balance.constants.NAZAR_CHANCE, 0.10, "Natural Nazar chance
 assert.equal(context.Balance.constants.MIMIC_CHANCE, 0.01, "Mimic chance is tuned to 1%");
 
 const forceSeed = JSON.parse(game.exportSave());
-forceSeed.stage = 9;
-forceSeed.killsInStage = 6;
+forceSeed.stage = 10;
+forceSeed.killsInStage = 8;
 forceSeed.progression.farmingBeforeBoss = true;
 forceSeed.progression.bossRetryAvailable = true;
 forceSeed.progression.pendingBossStage = 10;
@@ -295,8 +296,8 @@ assert.equal(forceGame.getState().monster.type, "nazar");
 assert.equal(forceGame.forceNazar(), false, "FORCE NAZAR never creates a duplicate active Nazar");
 const forcedReload = createStartedGame(forceAdapter);
 assert.equal(forcedReload.getState().monster.type, "nazar", "Forced Nazar survives the normal save/load path");
-assert.equal(forcedReload.getState().stage, 9);
-assert.equal(forcedReload.getState().killsInStage, 6);
+assert.equal(forcedReload.getState().stage, 10);
+assert.equal(forcedReload.getState().killsInStage, 8);
 
 // 17-27: reincarnation, permanence, and calculation bonuses.
 const permanentSeed = JSON.parse(game.exportSave());
@@ -429,9 +430,9 @@ const v1 = {
   monster: { name: "Mossling", isBoss: false, hp: 12, maxHp: context.Balance.monsterBaseHp(9) }
 };
 const migrated = createStartedGame(new MemoryAdapter(v1)).getState();
-assert.equal(migrated.saveVersion, 5, "31. v1 save migrates to v5");
+assert.equal(migrated.saveVersion, 6, "31. v1 save migrates to v6");
 assert.equal(migrated.gold, 123);
-assert.equal(migrated.stage, 9);
+assert.equal(migrated.stage, 10);
 assert.equal(migrated.lutie.level, 7);
 assert.equal(migrated.guardians[0].level, 3);
 assert.equal(migrated.guardians[0].activeThisRun, true);
@@ -449,7 +450,7 @@ v2.manaStones = [{ id: "v2-stone", level: 20, rarity: "HIGH", power: context.Bal
 const migratedV2Adapter = new MemoryAdapter(v2);
 const migratedV2Game = createStartedGame(migratedV2Adapter);
 const migratedV2 = migratedV2Game.getState();
-assert.equal(migratedV2.saveVersion, 5, "v0.2 save migrates to v5");
+assert.equal(migratedV2.saveVersion, 6, "v0.2 save migrates to v6");
 assert.equal(migratedV2.guardians[0].level, 17);
 assert.equal(migratedV2.guardians[0].reincarnationLevel, 3);
 assert.equal(migratedV2.guardians[0].equippedManaStoneId, "v2-stone");
@@ -490,7 +491,7 @@ assert.equal(derivedAdapter.data.monster.maxHp, undefined, "Persistent payload o
 
 // 32-34: export, invalid import, complete reset.
 const exported = upgradeGame.exportSave();
-assert.equal(JSON.parse(exported).saveVersion, 5, "32. Export produces valid JSON");
+assert.equal(JSON.parse(exported).saveVersion, 6, "32. Export produces valid JSON");
 const beforeInvalidImport = upgradeGame.exportSave();
 assert.equal(upgradeGame.importSave("{bad json").ok, false);
 assert.equal(upgradeGame.exportSave(), beforeInvalidImport, "33. Invalid JSON does not damage current state");

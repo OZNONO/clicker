@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const context = vm.createContext({ console, Date, JSON, Math, Map, Set, setInterval: () => 1, clearInterval: () => {} });
 context.window = context;
-for (const file of ['balance.js', 'data.js', 'storage.js', 'game.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context);
+for (const file of ['balance.js', 'data.js', 'storage.js', 'game.js', 'i18n.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context);
 const B = context.Balance;
 const clone = value => JSON.parse(JSON.stringify(value));
 class MemoryAdapter {
@@ -30,16 +30,17 @@ function active(seed, levels = [1]) {
 function timedSeed(type, stage, hp, limit = 30000) {
   const seed = fresh();
   seed.stage = stage;
-  seed.killsInStage = type === 'stageBoss' ? 9 : 0;
+  seed.killsInStage = ['stageBoss', 'regionBoss'].includes(type) ? 9 : 0;
   seed.monster = { type, hp, guardianId: type === 'guardian' ? 'guardian-01' : null };
   seed.boss = { timeRemainingMs: limit, deadlineAt: 1_000_000 + limit };
   return seed;
 }
 function farmingSeed() {
   const seed = fresh();
-  seed.stage = 9;
+  seed.stage = 10;
+  seed.killsInStage = 8;
   seed.progression = { ...seed.progression, farmingBeforeBoss: true, bossRetryAvailable: true, pendingBossStage: 10, pendingEncounterType: 'regionBoss' };
-  seed.monster = { type: 'normal', hp: B.monsterBaseHp(9) };
+  seed.monster = { type: 'normal', hp: B.monsterBaseHp(10) };
   return seed;
 }
 
@@ -80,10 +81,11 @@ for (const stage of [5, 15, 25, 10, 20, 30]) test(`special encounter preserved a
   const { game } = setup(seed);
   game.attack();
   assert.equal(game.getState().stage, stage);
-  assert.equal(game.getState().monster.type, stage % 10 === 5 ? 'guardian' : 'regionBoss');
+  assert.equal(game.getState().monster.type, stage % 10 === 5 ? 'guardian' : 'normal');
 });
 test('an overdue live attack cannot clear an expired boss', () => {
   const { game, setClock } = setup(timedSeed('stageBoss', 1, 1));
+  game.stop();
   setClock(1_030_001);
   assert.equal(game.attack(), false);
   assert.equal(game.getState().progression.farmingBeforeBoss, true);
@@ -136,7 +138,7 @@ test('Bag cost remains payable at every finite capacity level', () => {
   const { game } = setup(seed);
   assert.equal(game.getGoldCapacity(), 10000);
   assert.equal(game.upgradeBag(), true);
-  assert.equal(game.getGoldCapacity(), 20000);
+  assert.equal(game.getGoldCapacity(), 30000);
   assert.equal(game.getState().gold, 0);
   assert.equal(game.upgradeBag(), false);
 });
@@ -196,9 +198,9 @@ test('offline timed wall consumes timer then farms with normal HP/Gold', () => {
   assert.equal(summary.goldEarned, Math.floor(30 / hp) * B.monsterGold(4));
   assert.equal(summary.stagesAdvanced, 0);
 });
-test('offline Region wall keeps exact retry target, uses previous-stage farm', () => {
+test('offline Region wall keeps exact retry target, uses same-stage farm', () => {
   const { game } = setup(timedSeed('regionBoss', 10, 350), 60000);
-  assert.equal(game.getState().stage, 9);
+  assert.equal(game.getState().stage, 10);
   assert.equal(game.getState().progression.pendingBossStage, 10);
   assert.equal(game.getState().progression.pendingEncounterType, 'regionBoss');
 });
@@ -225,7 +227,7 @@ test('offline guardian acquisition is deterministic and increases following DPS'
 test('offline farming applies artifact once and reports capacity loss', () => {
   const seed = farmingSeed(); seed.gold = 9999; seed.artifacts.gold.level = 5;
   const { game, summary } = setup(seed, 60000);
-  const total = Math.floor(60 / B.monsterBaseHp(9)) * Math.floor(B.monsterGold(9) * 1.5);
+  const total = Math.floor(60 / B.monsterBaseHp(10)) * Math.floor(B.monsterGold(10) * 1.5);
   assert.equal(summary.goldEarned, 1);
   assert.equal(summary.goldLost, total - 1);
   assert.equal(game.getState().gold, 10000);
@@ -277,17 +279,17 @@ test('natural balloon forbidden before reincarnation, even RNG zero', () => {
   const { game } = setup(timedSeed('regionBoss', 10, 1), 0, () => 0);
   game.attack(); assert.equal(game.getState().stage, 11);
 });
-test('natural balloon after Region clear skips 11–20 without synthetic rewards', () => {
+test('natural balloon after Region clear starts Stage 20 challenge without premature rewards', () => {
   const seed = timedSeed('regionBoss', 10, 1); seed.lifetime.totalReincarnations = 1;
   const { game } = setup(seed, 0, () => 0);
   let balloon;
   game.subscribe((s, e) => { if (e.type === 'balloon') balloon = e; });
   game.attack();
-  assert.equal(game.getState().stage, 21);
+  assert.equal(game.getState().stage, 20);
   assert.equal(game.getState().gold, B.monsterGold(10));
   assert.equal(game.getState().manaStones.length, 1);
   assert.equal(game.getState().guardians.filter(g => g.discovered).length, 0);
-  assert.equal(balloon.destination, 21);
+  assert.equal(balloon.destination, 20);
 });
 test('balloon RNG threshold is 5%, and non-Region gates never trigger', () => {
   assert.equal(B.constants.BALLOON_TRIGGER_CHANCE, 0.05);
@@ -301,7 +303,7 @@ test('balloon RNG threshold is 5%, and non-Region gates never trigger', () => {
 test('FORCE BALLOON bypasses unlock and never awards skipped rewards', () => {
   const { game } = setup(); const before = game.getState();
   assert.equal(game.forceBalloon(), true);
-  assert.equal(game.getState().stage, 11);
+  assert.equal(game.getState().stage, 10);
   assert.equal(game.getState().gold, before.gold);
   assert.deepEqual(game.getState().manaStones, before.manaStones);
 });
@@ -322,7 +324,7 @@ for (const version of [1, 2, 3, 4]) test(`v${version} migration preserves wealth
   delete seed.bagLevel; delete seed.lastSavedAt;
   const { game, summary } = setup(seed, 1e12);
   assert.equal(summary, null);
-  assert.equal(game.getState().saveVersion, 5);
+  assert.equal(game.getState().saveVersion, 6);
   assert.equal(game.getState().gold, seed.gold);
   assert.ok(game.getGoldCapacity() >= seed.gold);
   assert.equal(game.getState().guardians[0].level, 17);
@@ -333,7 +335,7 @@ test('v4 normal slot ten migrates into normal Stage Boss', () => {
   assert.equal(game.getState().monster.type, 'stageBoss');
   assert.equal(game.getState().monster.hp, B.normalStageBossHp(1));
 });
-test('v5 source-state roundtrip excludes derived capacity and stats', () => {
+test('v6 source-state roundtrip excludes derived capacity and stats', () => {
   const seed = active(fresh(), [25]); seed.bagLevel = 5; seed.maxGoldCapacity = 999999;
   const a = setup(seed), payload = JSON.parse(a.game.exportSave());
   assert.equal(payload.maxGoldCapacity, undefined);
@@ -403,4 +405,220 @@ test('new saved partial Stage Boss retains source HP/timer and gate identity', (
   assert.equal(b.game.getState().monster.hp, 10);
   assert.equal(b.game.getState().boss.timeRemainingMs, 15000);
   assert.equal(b.game.getState().killsInStage, 9);
+});
+
+// v0.3.1: changed expectations above retain the original coverage; these exercise new semantics.
+test('Region stage has nine normal enemies, then its tenth Region Boss', () => {
+  const seed = fresh(); seed.stage = 10; seed.lutie.level = 100;
+  const { game } = setup(seed);
+  for (let i = 0; i < 9; i++) {
+    assert.equal(game.getState().monster.type, 'normal');
+    assert.equal(game.getState().killsInStage, i);
+    game.attack();
+  }
+  assert.equal(game.getState().monster.type, 'regionBoss');
+  assert.equal(game.getState().killsInStage, 9);
+  game.attack();
+  assert.equal(game.getState().stage, 11);
+  assert.equal(game.getState().killsInStage, 0);
+});
+for (const failure of ['timeout', 'giveUp']) test(`Region ${failure} repeats slot nine at same stage and retries boss directly`, () => {
+  const { game } = setup(timedSeed('regionBoss', 20, 1000));
+  game.stop();
+  if (failure === 'timeout') game.bossTimerTick(1_030_000); else game.giveUpBoss();
+  assert.equal(game.getState().stage, 20);
+  assert.equal(game.getState().killsInStage, 8);
+  const seed = JSON.parse(game.exportSave()); seed.lutie.level = 100;
+  game.importSave(JSON.stringify(seed));
+  for (let i = 0; i < 12; i++) {
+    game.attack();
+    assert.equal(game.getState().stage, 20);
+    assert.equal(game.getState().killsInStage, 8);
+    assert.equal(game.getState().monster.type, 'normal');
+  }
+  game.challengeBoss();
+  assert.equal(game.getState().monster.type, 'regionBoss');
+  assert.equal(game.getState().killsInStage, 9);
+});
+test('Balloon victory awards target exactly once, grants skipped Guardian and no skipped Gold', () => {
+  const seed = timedSeed('regionBoss', 10, 1); seed.lifetime.totalReincarnations = 1; seed.lutie.level = 100;
+  let roll = 0;
+  const { game, adapter } = setup(seed, 0, () => roll);
+  game.attack();
+  assert.equal(game.getState().stage, 20);
+  assert.equal(game.getState().balloonChallenge.resume.stage, 11);
+  assert.equal(game.getState().killsInStage, 9);
+  assert.equal(game.getState().guardians.filter(g => g.activeThisRun).length, 0);
+  roll = 0.99;
+  game.attack();
+  const after = game.getState();
+  assert.equal(after.stage, 21);
+  assert.equal(after.balloonChallenge, null);
+  assert.equal(after.gold, B.monsterGold(10) + B.monsterGold(20));
+  assert.deepEqual(after.manaStones.map(s => s.level), [10, 20]);
+  assert.equal(after.guardians.filter(g => g.activeThisRun).length, 1);
+  assert.equal(after.run.encounteredGuardianIds.length, 1);
+  const reloaded = setup(null, 0, () => 0.99, adapter).game;
+  assert.equal(reloaded.getState().gold, after.gold);
+  assert.equal(reloaded.getState().manaStones.length, 2);
+  assert.equal(reloaded.getState().guardians.filter(g => g.activeThisRun).length, 1);
+});
+for (const failure of ['timeout', 'giveUp', 'offline']) test(`Balloon ${failure} returns to stage 11 with no target rewards or target camping`, () => {
+  const seed = timedSeed('regionBoss', 10, 1); seed.lifetime.totalReincarnations = 1;
+  const started = setup(seed, 0, () => 0); const game = started.game;
+  game.attack(); game.stop();
+  const highest = game.getState().run.highestStage;
+  let after;
+  if (failure === 'timeout') { game.bossTimerTick(1_030_000); after = game.getState(); }
+  if (failure === 'giveUp') { game.giveUpBoss(); after = game.getState(); }
+  if (failure === 'offline') { after = setup(null, 30000, () => 0.99, started.adapter).game.getState(); }
+  assert.equal(after.stage, 11);
+  assert.equal(after.progression.farmingBeforeBoss, false);
+  assert.equal(after.balloonChallenge, null);
+  assert.equal(after.gold, B.monsterGold(10));
+  assert.equal(after.manaStones.length, 1);
+  assert.equal(after.guardians.filter(g => g.activeThisRun).length, 0);
+  assert.equal(after.run.highestStage, highest);
+});
+test('consecutive natural Balloon challenges preserve each intermediate Guardian opportunity', () => {
+  const seed = timedSeed('regionBoss', 10, 1); seed.lifetime.totalReincarnations = 1; seed.lutie.level = 100;
+  const { game } = setup(seed, 0, () => 0);
+  game.attack(); game.attack();
+  assert.equal(game.getState().stage, 30);
+  assert.equal(game.getState().balloonChallenge.resume.stage, 21);
+  game.attack();
+  assert.equal(game.getState().stage, 40);
+  assert.equal(game.getState().balloonChallenge.resume.stage, 31);
+  assert.equal(game.getState().guardians.filter(g => g.activeThisRun).length, 2);
+  assert.equal(game.getState().gold, B.monsterGold(10) + B.monsterGold(20) + B.monsterGold(30));
+});
+test('Balloon mid-challenge save/load and export/import keep HP, timer and rollback destination', () => {
+  const seed = timedSeed('regionBoss', 10, 1); seed.lifetime.totalReincarnations = 1;
+  const { game, adapter } = setup(seed, 0, () => 0); game.attack(); game.attack();
+  const before = game.getState();
+  const restored = setup(null, 0, () => 0.99, adapter).game;
+  assert.deepEqual(restored.getState().balloonChallenge, before.balloonChallenge);
+  assert.equal(restored.getState().monster.hp, before.monster.hp);
+  assert.equal(restored.getState().boss.timeRemainingMs, before.boss.timeRemainingMs);
+  assert.equal(restored.getState().run.highestStage, before.run.highestStage);
+  assert.equal(restored.importSave(game.exportSave()).ok, true);
+  restored.giveUpBoss();
+  assert.equal(restored.getState().stage, 11);
+});
+test('FORCE Balloon prevents nested challenges and restores exact interrupted farming encounter', () => {
+  const { game } = setup(farmingSeed());
+  game.forceNazar(); game.attack();
+  const before = game.getState();
+  assert.equal(game.forceBalloon(), true);
+  assert.equal(game.getState().stage, 20);
+  assert.equal(game.forceBalloon(), false);
+  game.giveUpBoss();
+  const after = game.getState();
+  assert.equal(after.stage, before.stage);
+  assert.equal(after.killsInStage, before.killsInStage);
+  assert.deepEqual(after.monster, before.monster);
+  assert.deepEqual(after.progression, before.progression);
+  assert.equal(after.run.nazarEscalation, before.run.nazarEscalation);
+});
+test('Balloon with full roster invents neither extra Guardians nor duplicate Guardian Gold', () => {
+  const seed = active(timedSeed('regionBoss', 10, 1), Array(10).fill(1));
+  seed.lifetime.totalReincarnations = 1; seed.lutie.level = 100;
+  let roll = 0; const { game } = setup(seed, 0, () => roll);
+  game.attack(); roll = 0.99; game.attack();
+  assert.equal(game.getState().gold, B.monsterGold(10) + B.monsterGold(20));
+  assert.equal(game.getState().guardians.filter(g => g.activeThisRun).length, 10);
+});
+test('Nazar receives fractional automatic damage and dies without rewards/progression', () => {
+  const { game, setClock } = setup(farmingSeed()); game.forceNazar();
+  const before = game.getState(); setClock(1_000_100); game.automaticTick();
+  assert.ok(Math.abs(game.getState().monster.hp - (before.monster.hp - game.getTotalDps() / 10)) < 1e-8);
+  const seed = JSON.parse(game.exportSave()); seed.monster.hp = 0.05; game.importSave(JSON.stringify(seed));
+  setClock(1_000_200); game.automaticTick();
+  assert.equal(game.getState().monster.type, 'normal');
+  assert.equal(game.getState().gold, before.gold);
+  assert.equal(game.getState().killsInStage, before.killsInStage);
+});
+for (const intervals of [[100,200,300,400,500,600,700,800,900,1000], [137,391,777,1000]]) test(`elapsed DPS conserves one-second damage for ${intervals.length} irregular frames`, () => {
+  const seed = active(fresh(), [25]); seed.stage = 100; seed.monster = { type: 'normal', hp: B.monsterBaseHp(100) };
+  const { game, setClock } = setup(seed); const before = game.getState().monster.hp; const dps = game.getTotalDps();
+  const displays = []; let tickCount = 0;
+  game.subscribe((s,e) => { if (e.type === 'autoDamageDisplay') displays.push(e.amount); if (e.type === 'autoAttack') tickCount++; });
+  for (const elapsed of intervals) { setClock(1_000_000 + elapsed); game.automaticTick(); }
+  assert.ok(Math.abs(before - game.getState().monster.hp - dps) < 1e-6);
+  assert.equal(tickCount, intervals.length);
+  assert.equal(displays.length, 1);
+  assert.ok(Math.abs(displays[0] - dps) < 1e-8);
+});
+test('DPS damage carries across kills instead of dropping delayed-frame overkill', () => {
+  const seed = active(fresh(), [10]);
+  const { game, setClock } = setup(seed); setClock(1_001_000); game.automaticTick();
+  assert.equal(game.getState().killsInStage, 3);
+  assert.ok(Math.abs(game.getState().monster.hp - 2) < 1e-8); // 38 DPS = 3*10 + 8
+});
+test('DPS-changing purchase settles preceding elapsed time at old DPS', () => {
+  const seed = active(fresh(), [25]); seed.stage = 100; seed.gold = 10000; seed.monster = { type: 'normal', hp: B.monsterBaseHp(100) };
+  const { game, setClock } = setup(seed); const hp = game.getState().monster.hp; const oldDps = game.getTotalDps();
+  setClock(1_000_500); game.upgradeGuardian('guardian-01'); const newDps = game.getTotalDps();
+  setClock(1_001_000); game.automaticTick();
+  assert.ok(Math.abs(hp - game.getState().monster.hp - (oldDps + newDps) / 2) < 1e-6);
+});
+test('throttled frames use offline catchup once and do not replay after restart', () => {
+  const { game, setClock, adapter } = setup(farmingSeed());
+  setClock(1_060_000); game.automaticTick(); const gold = game.getState().gold;
+  assert.equal(gold, Math.floor(60 / B.monsterBaseHp(10)) * B.monsterGold(10));
+  game.automaticTick(); assert.equal(game.getState().gold, gold);
+  assert.equal(setup(null, 60000, () => 0.99, adapter).game.getState().gold, gold);
+});
+test('automatic damage up to deadline can defeat a boss even when the callback is late', () => {
+  const { game, setClock } = setup(timedSeed('regionBoss', 10, 0.5, 1000));
+  setClock(1_001_100); game.automaticTick();
+  assert.equal(game.getState().stage, 11);
+  assert.equal(game.getState().manaStones.length, 1);
+});
+test('Bag curve matches requested table and extends by x3; every upgrade is affordable at cap', () => {
+  const expected = [10000,30000,120000,400000,1000000,3000000,10000000,30000000,100000000,300000000,900000000];
+  expected.forEach((capacity,i) => {
+    assert.equal(B.bagCapacity(i+1),capacity);
+    assert.equal(B.bagUpgradeCost(i+1),capacity/2);
+    assert.equal(B.bagLevelForGold(capacity),i+1);
+    assert.equal(B.bagLevelForGold(capacity+1),i+2);
+  });
+});
+test('v5 migration preserves Bag level, changes old Region farming to stage ten and defaults English', () => {
+  const seed = farmingSeed(); seed.saveVersion = 5; seed.stage = 9; seed.bagLevel = 4; delete seed.settings.language;
+  const { game } = setup(seed);
+  assert.equal(game.getState().bagLevel, 4);
+  assert.equal(game.getGoldCapacity(), 400000);
+  assert.equal(game.getState().stage, 10);
+  assert.equal(game.getState().killsInStage, 8);
+  assert.equal(game.getState().settings.language, 'en');
+  assert.equal(game.getState().balloonChallenge, null);
+});
+test('language changes persist without changing combat/economy/source progression', () => {
+  const { game, adapter } = setup(active(fresh(), [25])); game.stop();
+  const before = game.getState(); const dps = game.getTotalDps();
+  assert.equal(game.setSetting('language','ko'),true);
+  const after = game.getState(); after.settings.language = before.settings.language;
+  assert.deepEqual(after,before);
+  assert.equal(game.getTotalDps(),dps);
+  assert.equal(setup(null,0,()=>0.99,adapter).game.getState().settings.language,'ko');
+  assert.equal(game.setSetting('language','invalid'),false);
+});
+test('central i18n has Korean translations for static HTML and literal UI keys', () => {
+  const dictionary = context.I18n.ko;
+  const html = fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
+  const ui = fs.readFileSync(path.join(__dirname,'..','ui.js'),'utf8');
+  const keys = [...html.matchAll(/data-i18n(?:-aria)?="([^"]+)"/g), ...ui.matchAll(/\bt\("([^"]+)"/g)].map(match=>match[1]);
+  for (const key of keys) assert.ok(dictionary[key], `Korean translation: ${key}`);
+  context.I18n.setLanguage('ko');
+  assert.equal(context.I18n.t('MONSTER {number} / {total}',{number:9,total:10}),'몬스터 9 / 10');
+  context.I18n.setLanguage('en');
+  assert.equal(context.I18n.t('MONSTER {number} / {total}',{number:1,total:10}),'MONSTER 1 / 10');
+});
+
+test('base DPS one does not display as zero after ten fractional ticks', () => {
+  const { game, setClock } = setup(); let amount;
+  game.subscribe((s,event) => { if (event.type === 'autoDamageDisplay') amount = event.amount; });
+  for (let elapsed = 100; elapsed <= 1000; elapsed += 100) { setClock(1_000_000 + elapsed); game.automaticTick(); }
+  assert.equal(amount, 1);
 });

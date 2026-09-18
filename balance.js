@@ -3,11 +3,12 @@
 
   // All unverified values below are temporary reconstruction values.
   const constants = Object.freeze({
-    SAVE_VERSION: 5,
+    SAVE_VERSION: 6,
     NORMAL_STAGE_BOSS_TIME_LIMIT_MS: 30000,
     NORMAL_STAGE_BOSS_HP_MULTIPLIER: 3,
     BAG_INITIAL_CAPACITY: 10000,
-    BAG_CAPACITY_GROWTH: 2,
+    BAG_CAPACITY_TABLE: Object.freeze([10000, 30000, 120000, 400000, 1000000, 3000000, 10000000, 30000000, 100000000, 300000000]),
+    BAG_CAPACITY_GROWTH: 3,
     BAG_UPGRADE_COST_RATIO: 0.5,
     BAG_PERSISTS_REINCARNATION: true,
     BALLOON_TRIGGER_CHANCE: 0.05,
@@ -39,7 +40,9 @@
     GUARDIAN_COST_GROWTH: 1.07,
     GUARDIAN_DUPLICATE_GOLD_MULTIPLIER: 10,
     GUARDIAN_REINCARNATION_BONUS: 0.10,
-    AUTO_ATTACK_INTERVAL_MS: 1000,
+    AUTO_ATTACK_INTERVAL_MS: 100,
+    AUTO_DAMAGE_DISPLAY_INTERVAL_MS: 1000,
+    LIVE_CATCHUP_THRESHOLD_MS: 2000,
     MAX_UPGRADE_LEVELS_PER_PURCHASE: 100000,
     MIMIC_CHANCE: 0.01,
     MIMIC_HP_MULTIPLIER: 3,
@@ -65,11 +68,18 @@
 
   const Balance = Object.freeze({
     constants,
-    bagCapacity: (level) => Math.min(Number.MAX_VALUE, constants.BAG_INITIAL_CAPACITY * Math.pow(constants.BAG_CAPACITY_GROWTH, level - 1)),
+    bagCapacity(level) {
+      const table = constants.BAG_CAPACITY_TABLE;
+      return table[level - 1] || Math.min(Number.MAX_VALUE, table[table.length - 1] * Math.pow(constants.BAG_CAPACITY_GROWTH, level - table.length));
+    },
     bagUpgradeCost: (level) => Math.floor(Balance.bagCapacity(level) * constants.BAG_UPGRADE_COST_RATIO),
-    bagLevelForGold: (gold) => Math.max(1, 1 + Math.ceil(Math.log(Math.max(1, gold / constants.BAG_INITIAL_CAPACITY)) / Math.log(constants.BAG_CAPACITY_GROWTH))),
+    bagLevelForGold(gold) {
+      const table = constants.BAG_CAPACITY_TABLE;
+      const index = table.findIndex(capacity => capacity >= gold);
+      return index >= 0 ? index + 1 : table.length + Math.ceil(Math.log(gold / table[table.length - 1]) / Math.log(constants.BAG_CAPACITY_GROWTH));
+    },
     normalStageBossHp: (stage) => Balance.monsterBaseHp(stage) * constants.NORMAL_STAGE_BOSS_HP_MULTIPLIER,
-    balloonDestination: (clearedStage) => clearedStage + 1 + constants.BALLOON_SKIP_STAGES,
+    balloonDestination: (clearedStage) => clearedStage + constants.BALLOON_SKIP_STAGES,
     lutieTap: (level) => Math.max(1, safeFloor(level * Math.pow(constants.LUTIE_TAP_GROWTH, level - 1))),
     lutieUpgradeCost: (level) => Math.max(1, safeFloor(constants.LUTIE_UPGRADE_BASE_COST * Math.pow(constants.LUTIE_UPGRADE_COST_GROWTH, level - 1))),
     monsterBaseHp: (stage) => Math.max(1, safeFloor(constants.MONSTER_BASE_HP * Math.pow(constants.MONSTER_HP_GROWTH, stage - 1))),

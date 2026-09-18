@@ -1,4 +1,4 @@
-# Lutie-like RPG Clicker v0.3
+# Lutie-like RPG Clicker v0.3.1
 
 A personal reconstruction prototype exploring the overall structure and feel of a discontinued mobile RPG clicker. It uses original CSS placeholder shapes only; no original copyrighted image or audio assets are included.
 
@@ -13,14 +13,16 @@ Double-click `index.html` and play in a modern browser. There is no build step, 
 Exact current rules, temporary design choices, offline algorithm, balance comparisons and migration policy are in [PROJECT_STATE.md](./PROJECT_STATE.md). Stable development rules are in [AGENTS.md](./AGENTS.md).
 
 - TAP combat by pointer or Space/Z/X/Enter, hit reactions, and distinct TAP/DPS feedback
-- Base DPS plus combined active Guardian DPS
+- Base DPS plus combined active Guardian DPS, applied every 100ms using elapsed time with roughly one-second damage text
+- English / 한국어 setting with persisted language and a central lightweight translation catalog
+- Exact grouped Gold/cost/capacity numbers; compact combat numbers
 - Mobile layout with persistent combat view and five bottom tabs
 - Ten-placeholder Guardian roster with encounters at Stages 5, 15, 25, and so on; all Guardians currently share the same temporary base DPS
-- Region Bosses at Stages 10, 20, 30, and so on
+- Region Bosses after nine normal monsters at Stages 10, 20, 30, and so on
 - Nine normal monsters followed by a normal Stage Boss gate on every ordinary stage
 - Bag capacity and Gold upgrades, with one shared capacity-aware reward path
 - Temporary offline automatic-DPS progression, boss walls, batched camping Gold and a capacity-loss summary
-- Post-reincarnation Balloon: 5% after a Region Boss clear, skips ten additional stages without skipped loot
+- Post-reincarnation Balloon: 5% after a Region Boss clear, challenges the Region Boss ten stages ahead; success preserves the skipped Guardian opportunity, failure restores normal progression
 - Atomic ALL +1 / ALL +10 upgrades for Guardians acquired this run; equal costs at equal levels
 - Thirty-second timed encounters, optional **Give Up**, failure farming, and manual boss retry
 - Guaranteed Region Boss Mana Stone rewards (Normal, with a provisional High upgrade chance)
@@ -37,7 +39,7 @@ Exact current rules, temporary design choices, offline algorithm, balance compar
 
 ## Save data and migration
 
-The full game is a single JSON-serializable save object. Version 5 adds Bag level and the last successful save checkpoint, but omits recalculable combat values such as Guardian DPS, Lutie TAP, Stone power, capacity and monster max HP. These values are rehydrated from `balance.js` and `data.js`. Versions 1–4 migrate without intentionally deleting existing Gold, progression, Guardian, Stone, Star or Artifact data. Existing over-cap Gold gets a sufficient Bag level instead of being deleted. Old saves without a checkpoint receive no retroactive offline reward; imports establish a fresh checkpoint without paying offline rewards.
+The full game is a single JSON-serializable save object. Version 6 preserves Bag level and the last successful save checkpoint and adds resumable Balloon challenge state and a language preference, but omits recalculable combat values such as Guardian DPS, Lutie TAP, Stone power, capacity and monster max HP. These values are rehydrated from `balance.js` and `data.js`. Versions 1–5 migrate without intentionally deleting existing Gold, progression, Guardian, Stone, Star or Artifact data. Existing over-cap Gold gets a sufficient Bag level instead of being deleted. Old saves without a checkpoint receive no retroactive offline reward; imports establish a fresh checkpoint without paying offline rewards.
 
 `game.js` and `ui.js` never access browser storage directly. They use the adapter boundary in `storage.js`:
 
@@ -53,7 +55,7 @@ Browser storage is local to each origin, browser, and device. A `file://` save o
 
 Guardian cards are created only when their roster structure changes. Combat ticks and upgrades patch the live Level, DPS, Gold, Mana Stone, and purchase-cost fields in place, preserving Guardian scroll position, button focus, and an open Mana Stone picker while combat continues.
 
-The collapsed Developer Info area includes **Force Nazar**, **+100K Gold**, **Force Balloon** and **+1H Offline**. Force Nazar requires farming and preserves its zero rewards/escalation rules. Dev Gold explicitly bypasses Bag capacity. Force Balloon skips ten stages without rewards and bypasses the unlock condition. +1H Offline invokes the temporary offline algorithm for testing.
+The collapsed Developer Info area includes **Force Nazar**, **+100K Gold**, **Force Balloon** and **+1H Offline**. Force Nazar requires farming and preserves its zero rewards/escalation rules. Dev Gold explicitly bypasses Bag capacity. Force Balloon challenges the next Region Boss, restores the interrupted encounter on failure, and bypasses the unlock condition. +1H Offline invokes the temporary offline algorithm for testing.
 
 ## GitHub Pages
 
@@ -66,6 +68,7 @@ The mobile layout uses the dynamic viewport height, allows the game shell to shr
 - `data.js` — placeholder Guardian, Artifact, and skill definitions
 - `balance.js` — reconstruction constants and replaceable formulas
 - `game.js` — runtime state, calculations, combat, progression, migration, and save import/export
+- `i18n.js` — central UI translations and parameterized messages
 - `ui.js` — DOM rendering, tab navigation, keyboard/pointer input, files, and visual feedback
 - `storage.js` — persistence interface and `LocalStorageAdapter`
 - `styles.css` — mobile layout and CSS-only placeholder graphics
@@ -81,6 +84,6 @@ Run:
 node --test tests/smoke.test.cjs tests/progression.test.cjs
 ```
 
-The original smoke suite is retained, with expected save versions updated to v5. The additional suite covers the new gates, ALL upgrades, capacity, offline clock/settlement safety, Balloon and v1–v4 migration. Run `node tests/browser.test.cjs` with Playwright available through `NODE_PATH` and an installed Edge browser (`BROWSER_CHANNEL=chrome` also supported). Browser tooling is optional for development and is not a game runtime dependency. Run `node --check` on each root JavaScript and test file.
+The original smoke suite is retained, with expected rules/save versions updated to v6. The additional suite covers the new gates, ALL upgrades, capacity, offline clock/settlement safety, Balloon and v1–v5 migration. Run `node tests/browser.test.cjs` with Playwright available through `NODE_PATH` and an installed Edge browser (`BROWSER_CHANNEL=chrome` also supported). Browser tooling is optional for development and is not a game runtime dependency. Run `node --check` on each root JavaScript and test file.
 
 Nazar appearance rates and all other unverified balance constants remain temporary tuning values rather than verified original values.

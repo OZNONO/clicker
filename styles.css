@@ -90,3 +90,29 @@ button { touch-action:manipulation; }
   .top-bar { flex-basis:52px; }
   .bottom-nav { flex-basis:52px; }
 }
+
+/* Exact currency can wrap; combat values keep their compact formatter. */
+.top-bar { grid-template-columns:minmax(0,1fr) auto minmax(0,1.7fr); flex-basis:auto; min-height:68px; gap:8px; }
+.resource { min-width:0; }
+.resource.gold strong { display:block; font-size:14px; overflow-wrap:anywhere; }
+.resource.gold small { overflow-wrap:anywhere; }
+.summary-grid>div,.guardian-resources,.total-chip,.artifact-card>div { min-width:0; }
+.summary-grid strong,.guardian-resources strong,.purchase-button small { overflow-wrap:anywhere; }
+.guardian-resources { max-width:66%; }
+.gold-chip { max-width:68%; }
+.purchase-button { white-space:normal; overflow-wrap:anywhere; padding:6px; min-height:44px; }
+.settings-list select { max-width:50%; min-height:44px; color:var(--ink); border:1px solid #66517d; border-radius:6px; background:var(--panel); }
+.monster-meta { gap:8px; }
+.monster-meta>div { min-width:0; }
+.kill-count { text-align:right; }
+.encounter-badge { max-width:calc(100% - 40px); text-align:center; }
+.stone-acquisition { top:39%; }
+.hp-fill { transition:width .09s linear; }
+.arena.nazar .hp-fill { transition:none; }
+.settings-list>button>span:first-child { color:inherit; font-size:9px; font-weight:900; }
+@media (max-width:350px) {
+  .brand { gap:4px; font-size:10px; }
+  .brand-mark { width:24px; height:28px; }
+  .top-bar { padding-inline:10px; }
+  .resource.gold strong { font-size:12px; }
+}
