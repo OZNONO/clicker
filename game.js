@@ -616,6 +616,7 @@
     }
 
     function handleDefeat(defeatedMonster) {
+      const goldBefore = state.gold;
       let reward = 0;
       let stone = null;
       let acquisition = null;
@@ -646,6 +647,9 @@
         acquisition = result.acquisition;
         stone = result.stone;
       }
+      // Feedback reports the complete amount actually credited, including capacity
+      // clamping and any duplicate-Guardian reward awarded by this encounter.
+      reward = state.gold - goldBefore;
       return { reward, stone, acquisition };
     }
 

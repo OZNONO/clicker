@@ -45,7 +45,10 @@
 
   const game = LutieGame.createGame(GameStorage.createDefault());
   let lastTapPoint = null;
-  let monsterAnimationTimer = null;
+  let monsterHitTimer = null;
+  let monsterTransitionTimer = null;
+  let monsterHitToken = 0;
+  let monsterTransitionToken = 0;
   let acquisitionTimer = null;
   let toastTimer = null;
   let openStonePickerGuardianId = null;
@@ -269,13 +272,64 @@
     popup.addEventListener("animationend", () => popup.remove());
   }
 
-  function replayMonsterAnimation(className, state) {
+  function showGoldReward(amount, state) {
+    if (!state.settings.damageNumbers || amount <= 0) return;
+    const popup = document.createElement("span");
+    popup.className = "damage-popup reward-popup";
+    popup.textContent = `+${formatGold(amount)} G`;
+    popup.style.left = "50%";
+    popup.style.top = "47%";
+    elements.damageLayer.appendChild(popup);
+    popup.addEventListener("animationend", () => popup.remove());
+  }
+
+  function monsterVisual() {
+    return elements.monsterButton.querySelector(".monster-visual");
+  }
+
+  function replayMonsterHit(className, state) {
     if (!state.settings.hitAnimations) return;
-    clearTimeout(monsterAnimationTimer);
-    elements.monsterButton.classList.remove("hit-strong", "hit-soft", "defeated");
-    void elements.monsterButton.offsetWidth;
-    elements.monsterButton.classList.add(className);
-    monsterAnimationTimer = setTimeout(() => elements.monsterButton.classList.remove(className), className === "defeated" ? 310 : 210);
+    const visual = monsterVisual();
+    const token = ++monsterHitToken;
+    clearTimeout(monsterHitTimer);
+    visual.classList.remove("hit-strong", "hit-soft", "spawned");
+    void visual.offsetWidth;
+    visual.classList.add(className);
+    monsterHitTimer = setTimeout(() => {
+      if (token === monsterHitToken) visual.classList.remove(className);
+    }, 210);
+  }
+
+  function clearMonsterTransitions() {
+    monsterHitToken += 1;
+    monsterTransitionToken += 1;
+    clearTimeout(monsterHitTimer);
+    clearTimeout(monsterTransitionTimer);
+    elements.attackArea.querySelectorAll(".monster-transition").forEach((node) => node.remove());
+    monsterVisual().classList.remove("hit-strong", "hit-soft", "spawned");
+  }
+
+  function playMonsterSpawn(state) {
+    if (!state.settings.hitAnimations) return;
+    const visual = monsterVisual();
+    visual.classList.remove("hit-strong", "hit-soft", "spawned");
+    void visual.offsetWidth;
+    visual.classList.add("spawned");
+  }
+
+  function playEncounterTransition(defeatedType, state) {
+    clearMonsterTransitions();
+    if (!state.settings.hitAnimations) return;
+    const token = monsterTransitionToken;
+    const ghost = monsterVisual().cloneNode(true);
+    ghost.className = `monster-transition defeated type-${defeatedType}`;
+    elements.attackArea.appendChild(ghost);
+    playMonsterSpawn(state);
+    monsterTransitionTimer = setTimeout(() => {
+      if (token !== monsterTransitionToken) return;
+      ghost.remove();
+      monsterVisual().classList.remove("spawned");
+    }, 330);
   }
 
   function performAttack(point) {
@@ -326,6 +380,7 @@
     }
     render(state, event);
     if (["loaded", "reset", "imported"].includes(event.type)) {
+      clearMonsterTransitions();
       const summary = event.offlineSummary || null;
       lastOfflineSummary = summary;
       renderOfflineSummary(summary);
@@ -343,8 +398,11 @@
       const isSkill = event.type === "skillAttack";
       const point = !isAuto && lastTapPoint ? lastTapPoint : { x: rect.width * (isAuto ? .58 : .5), y: rect.height * .52 };
       if (!event.smooth) showDamage(event.amount, point.x, point.y, isAuto ? "auto" : isSkill ? "skill" : "tap", state);
-      if (event.defeated || !event.smooth) replayMonsterAnimation(event.defeated ? "defeated" : isAuto ? "hit-soft" : "hit-strong", state);
+      if (event.defeated && event.reward > 0) showGoldReward(event.reward, state);
+      if (event.defeated) playEncounterTransition(event.defeatedMonster.type, state);
+      else if (!event.smooth) replayMonsterHit(isAuto ? "hit-soft" : "hit-strong", state);
     }
+    if (["bossChallenge", "bossFailed", "balloon", "balloonFailed", "nazarForced", "reincarnated"].includes(event.type)) clearMonsterTransitions();
     if (event.type === "guardianAcquired") showAcquisition(event.guardian, event.dps);
     if (event.type === "manaStoneDropped") showStoneAcquisition(event.stone);
     if (event.type === "saved") showToast(t("Save complete"));
@@ -356,6 +414,7 @@
     if (event.target.closest("[data-no-attack], .encounter-badge")) return;
     const rect = elements.attackArea.getBoundingClientRect();
     performAttack({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+    if (event.target.closest("#monsterButton") && event.detail > 0) elements.monsterButton.blur();
   });
   elements.challengeBoss.addEventListener("click", (event) => { event.stopPropagation(); game.challengeBoss(); });
   elements.giveUpBoss.addEventListener("click", (event) => { event.stopPropagation(); game.giveUpBoss(); });
@@ -448,9 +507,10 @@
       return;
     }
     if (event.repeat || event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) return;
-    if (event.target.closest && event.target.closest("button, input, textarea, select, a, [contenteditable='true']")) return;
     if (![" ", "Spacebar", "z", "x", "Enter"].includes(event.key)) return;
-    if (event.key === " " || event.key === "Spacebar") event.preventDefault();
+    const focusedMonster = event.target === elements.monsterButton || (event.target.closest && event.target.closest("#monsterButton"));
+    if (!focusedMonster && event.target.closest && event.target.closest("button, input, textarea, select, a, [contenteditable='true']")) return;
+    if (event.key === " " || event.key === "Spacebar" || (focusedMonster && event.key === "Enter")) event.preventDefault();
     performAttack();
   });
 

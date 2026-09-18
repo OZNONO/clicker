@@ -175,6 +175,41 @@ test('Nazar eligible/active/inactive indicator and zero rewards/progression', ()
   assert.deepEqual(after.manaStones, before.manaStones);
   assert.equal(setup().game.getNazarIndicatorState().visible, false);
 });
+test('combat reward event reports only Gold actually credited by Bag capacity', () => {
+  const seed = fresh();
+  seed.stage = 50; seed.gold = 9990; seed.bagLevel = 1;
+  seed.monster = { type: 'normal', hp: 1 };
+  const { game } = setup(seed, 0, () => 0);
+  let rewardEvent;
+  game.subscribe((state, event) => { if (event.type === 'tap') rewardEvent = clone(event); });
+  game.attack();
+  assert.equal(game.getState().gold, 10000);
+  assert.equal(rewardEvent.reward, 10);
+});
+test('combat reward event is zero when capacity is full or Nazar is defeated', () => {
+  const full = fresh(); full.stage = 50; full.gold = 10000; full.bagLevel = 1; full.monster = { type: 'normal', hp: 1 };
+  const fullGame = setup(full, 0, () => 0).game;
+  let fullReward;
+  fullGame.subscribe((state, event) => { if (event.type === 'tap') fullReward = event.reward; });
+  fullGame.attack();
+  assert.equal(fullReward, 0);
+
+  const nazar = farmingSeed(); nazar.monster = { type: 'nazar', hp: 1 };
+  const nazarGame = setup(nazar).game;
+  let nazarReward;
+  nazarGame.subscribe((state, event) => { if (event.type === 'tap') nazarReward = event.reward; });
+  nazarGame.attack();
+  assert.equal(nazarReward, 0);
+});
+test('duplicate Guardian reward event equals the complete encounter Gold delta', () => {
+  const seed = active(timedSeed('guardian', 5, 1), [1]);
+  const { game } = setup(seed);
+  const before = game.getState().gold;
+  let rewardEvent;
+  game.subscribe((state, event) => { if (event.type === 'tap') rewardEvent = clone(event); });
+  game.attack();
+  assert.equal(rewardEvent.reward, game.getState().gold - before);
+});
 test('offline excludes TAP and skills even with very high Lutie level', () => {
   const a = fresh(), b = fresh(); b.lutie.level = 200;
   const left = setup(a, 20000), right = setup(b, 20000);

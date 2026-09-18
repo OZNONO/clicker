@@ -16,6 +16,138 @@ const http = require('node:http');
       const game = LutieClicker.game;
       game.stop();
       const seed = JSON.parse(game.exportSave());
+      seed.stage = 1;
+      seed.killsInStage = 0;
+      seed.monster = { type: 'normal', hp: 1000 };
+      seed.lutie.level = 1;
+      seed.guardians.forEach(g => { g.activeThisRun = false; });
+      game.importSave(JSON.stringify(seed));
+    });
+    const tapHpBefore = await page.evaluate(() => LutieClicker.game.getState().monster.hp);
+    await page.click('#monsterButton');
+    assert.equal(await page.evaluate(() => LutieClicker.game.getState().monster.hp), tapHpBefore - 1, 'Pointer/tap attack remains active');
+    assert.notEqual(await page.evaluate(() => document.activeElement?.id), 'monsterButton', 'Pointer attack must not leave monster focus behind');
+    await page.click('#monsterButton');
+    assert.notEqual(await page.evaluate(() => document.activeElement?.id), 'monsterButton', 'Repeated pointer attacks must not retain focus');
+    for (const key of ['z', 'x', ' ']) {
+      const hpBefore = await page.evaluate(() => LutieClicker.game.getState().monster.hp);
+      const tap = await page.evaluate(() => LutieClicker.game.getTotalTap());
+      await page.keyboard.press(key === ' ' ? 'Space' : key);
+      const hpAfter = await page.evaluate(() => LutieClicker.game.getState().monster.hp);
+      assert.equal(hpBefore - hpAfter, tap, `${key === ' ' ? 'Space' : key.toUpperCase()} must attack exactly once after monster click`);
+    }
+    await page.locator('#monsterButton').focus();
+    const focusedSpaceBefore = await page.evaluate(() => LutieClicker.game.getState().monster.hp);
+    await page.keyboard.press('Space');
+    assert.equal(focusedSpaceBefore - await page.evaluate(() => LutieClicker.game.getState().monster.hp), 1, 'Focused monster Space activation attacks exactly once');
+    await page.click('[data-tab="settings"]');
+    await page.locator('#language').focus();
+    const controlHpBefore = await page.evaluate(() => LutieClicker.game.getState().monster.hp);
+    await page.keyboard.press('z');
+    assert.equal(await page.evaluate(() => LutieClicker.game.getState().monster.hp), controlHpBefore, 'Form controls retain the keyboard input guard');
+    await page.click('[data-tab="lutie"]');
+    await page.evaluate(() => {
+      const game = LutieClicker.game;
+      const seed = JSON.parse(game.exportSave());
+      seed.stage = 100;
+      seed.killsInStage = 0;
+      seed.gold = 8766;
+      seed.bagLevel = 1;
+      seed.monster = { type: 'normal', hp: 1 };
+      seed.lutie.level = 100;
+      game.importSave(JSON.stringify(seed));
+      document.querySelector('#damageLayer').replaceChildren();
+    });
+    await page.click('#monsterButton');
+    assert.equal(await page.locator('.reward-popup').innerText(), '+1,234 G', 'Gold popup uses exact actual credited amount');
+    await page.evaluate(() => {
+      const game = LutieClicker.game;
+      const seed = JSON.parse(game.exportSave());
+      seed.gold = 10000;
+      seed.bagLevel = 1;
+      seed.monster = { type: 'normal', hp: 1 };
+      game.importSave(JSON.stringify(seed));
+      document.querySelector('#damageLayer').replaceChildren();
+    });
+    await page.click('#monsterButton');
+    assert.equal(await page.locator('.reward-popup').count(), 0, 'No reward popup is shown when the Bag credits zero Gold');
+    await page.evaluate(() => {
+      const game = LutieClicker.game;
+      const seed = JSON.parse(game.exportSave());
+      seed.stage = 10;
+      seed.killsInStage = 8;
+      seed.gold = 0;
+      seed.progression = { ...seed.progression, farmingBeforeBoss: true, bossRetryAvailable: true, pendingBossStage: 10, pendingEncounterType: 'regionBoss' };
+      seed.monster = { type: 'nazar', hp: 1 };
+      game.importSave(JSON.stringify(seed));
+      document.querySelector('#damageLayer').replaceChildren();
+    });
+    await page.click('#monsterButton');
+    assert.equal(await page.locator('.reward-popup').count(), 0, 'Nazar never shows a Gold reward popup');
+
+    const animationState = await page.evaluate(() => {
+      const idle = document.querySelector('.monster-idle');
+      const visual = document.querySelector('.monster-visual');
+      return { idleAnimation: getComputedStyle(idle).animationName, visualAnimation: getComputedStyle(visual).animationName };
+    });
+    assert.equal(animationState.idleAnimation, 'monsterIdle');
+    await page.evaluate(() => {
+      const game = LutieClicker.game;
+      const seed = JSON.parse(game.exportSave());
+      seed.stage = 1; seed.killsInStage = 0; seed.lutie.level = 1;
+      seed.monster = { type: 'normal', hp: 10 };
+      game.importSave(JSON.stringify(seed));
+    });
+    await page.click('#monsterButton');
+    assert.equal(await page.locator('.monster-visual').evaluate(el => el.classList.contains('hit-strong')), true);
+    assert.equal(await page.locator('.monster-idle').evaluate(el => getComputedStyle(el).animationName), 'monsterIdle', 'Hit feedback does not replace idle animation');
+    await page.evaluate(() => {
+      const game = LutieClicker.game;
+      const seed = JSON.parse(game.exportSave());
+      seed.stage = 1; seed.killsInStage = 0; seed.lutie.level = 100;
+      seed.monster = { type: 'normal', hp: 1 };
+      game.importSave(JSON.stringify(seed));
+    });
+    await page.click('#monsterButton');
+    assert.equal(await page.locator('.monster-transition.defeated').count(), 1, 'Defeated encounter receives an independent death visual');
+    assert.equal(await page.locator('.monster-visual.spawned').count(), 1, 'Replacement encounter receives spawn feedback');
+    await page.click('#monsterButton');
+    await page.click('#monsterButton');
+    assert.ok(await page.locator('.monster-transition.defeated').count() <= 1, 'Rapid kills never accumulate stale death visuals');
+    assert.equal(await page.locator('.monster-visual.defeated').count(), 0, 'Current encounter is never left in defeated state');
+    await page.waitForTimeout(400);
+    assert.equal(await page.locator('.monster-transition').count(), 0, 'Transition cleanup removes stale rapid-kill visuals');
+    assert.equal(await page.locator('.monster-visual.spawned').count(), 0, 'Spawn state cleanup is token-safe');
+    for (const encounter of [
+      { type: 'stageBoss', stage: 1, kills: 9 },
+      { type: 'regionBoss', stage: 10, kills: 9 },
+      { type: 'guardian', stage: 5, kills: 0, guardianId: 'guardian-01' },
+      { type: 'mimic', stage: 1, kills: 0 },
+      { type: 'nazar', stage: 10, kills: 8, farming: true }
+    ]) {
+      await page.evaluate((entry) => {
+        const game = LutieClicker.game;
+        const seed = JSON.parse(game.exportSave());
+        seed.stage = entry.stage; seed.killsInStage = entry.kills; seed.lutie.level = 100; seed.gold = 0; seed.bagLevel = 1;
+        seed.balloonChallenge = null;
+        seed.progression = entry.farming
+          ? { ...seed.progression, farmingBeforeBoss: true, bossRetryAvailable: true, pendingBossStage: 10, pendingEncounterType: 'regionBoss' }
+          : { ...seed.progression, farmingBeforeBoss: false, bossRetryAvailable: false, pendingBossStage: null, pendingEncounterType: null };
+        seed.monster = { type: entry.type, hp: 1, guardianId: entry.guardianId || null };
+        game.importSave(JSON.stringify(seed));
+        game.attack();
+      }, encounter);
+      assert.equal(await page.locator(`.monster-transition.type-${encounter.type}`).count(), 1, `${encounter.type} uses the shared death transition`);
+      assert.equal(await page.locator('.monster-visual.spawned').count(), 1, `${encounter.type} replacement uses the shared spawn transition`);
+    }
+    await page.evaluate(() => {
+      document.querySelector('#acquisitionOverlay').hidden = true;
+      document.querySelector('#stoneAcquisitionOverlay').hidden = true;
+    });
+    await page.evaluate(() => {
+      const game = LutieClicker.game;
+      game.stop();
+      const seed = JSON.parse(game.exportSave());
       seed.stage = 10;
       seed.balloonChallenge = null;
       seed.progression = { ...seed.progression, farmingBeforeBoss: true, bossRetryAvailable: true, pendingBossStage: 10, pendingEncounterType: 'regionBoss' };

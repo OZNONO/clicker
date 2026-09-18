@@ -1,6 +1,8 @@
-# LUTIE CLICKER v0.3.1
+# LUTIE CLICKER v0.3.2
 
 Personal prototype reconstructed from memories of a discontinued game. Current implementation rules below are intentional; numerical formulas are not claims about the original game. Vanilla scripts load in order: balance → data → storage → game → i18n → UI. No build, external assets, audio, PWA or cloud save.
+
+v0.3.2 is a UI-only combat polish pass except that live defeat events now expose the complete Gold delta actually credited after Bag capacity. Pointer attacks release monster focus, keyboard attacks retain the existing control guard without double-activating Space/Enter, and monster idle, hit, death and spawn feedback use separate animation layers. Combat progression, reward timing, offline settlement and saveVersion 6 are unchanged.
 
 ## Confirmed / intended current rules
 

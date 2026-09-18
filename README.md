@@ -1,4 +1,4 @@
-# Lutie-like RPG Clicker v0.3.1
+# Lutie-like RPG Clicker v0.3.2
 
 A personal reconstruction prototype exploring the overall structure and feel of a discontinued mobile RPG clicker. It uses original CSS placeholder shapes only; no original copyrighted image or audio assets are included.
 
