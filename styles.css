@@ -59,3 +59,34 @@ button { touch-action:manipulation; }
 @media (min-width:481px) { body { display:grid; place-items:center; padding:16px; }.game-shell { height:min(900px,calc(100dvh - 32px)); border:1px solid rgba(255,255,255,.09); border-radius:23px; } }
 @media (max-height:720px) { .top-bar { flex-basis:60px; }.arena { flex-basis:255px; }.monster-button { top:102px; --monster-scale:.7; }.arena.farming .monster-button { top:123px; }.encounter-badge { top:80px; }.boss-timer { top:104px; }.give-up-button { top:102px; }.farming-banner { top:74px; }.combat-stats { flex-basis:42px; } }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms !important; transition-duration:.01ms !important; } }
+
+/* v0.3 additions retain the fixed combat / scrolling five-tab layout. */
+.resource.gold small { display:block; color:var(--muted); font-size:10px; }
+.top-bar { gap:10px; }
+.bag-card { display:grid; gap:8px; margin-top:16px; padding:12px; border:1px solid #655137; border-radius:10px; background:#2b2230; }
+.bag-card strong { color:var(--gold); font-size:12px; }
+.bag-card span { font-size:12px; overflow-wrap:anywhere; }
+.bag-card button,.all-upgrades button { min-height:44px; white-space:normal; overflow-wrap:anywhere; }
+.all-upgrades { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+.offline-summary { margin-top:16px; padding:12px; border:1px solid #4b4262; border-radius:10px; font-size:11px; }
+.offline-summary summary { min-height:32px; color:var(--gold); cursor:pointer; }
+.offline-summary small { color:var(--muted); }
+.offline-summary dl { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; }
+.offline-summary dt,.offline-summary dd { margin:0; overflow-wrap:anywhere; }
+.offline-summary dd { text-align:right; }
+.nazar-indicator { position:relative; top:auto; right:auto; justify-content:flex-end; min-height:22px; font-size:9px; color:#b1a6bd; opacity:1; }
+.arena.farming .farming-banner { top:114px; }
+.arena.farming .monster-button { top:157px; --monster-scale:.65; }
+.arena.farming .encounter-badge { top:181px; left:20px; right:auto; transform:none; }
+.monster-button.type-stageBoss .monster-body { border-color:#ffc397; background:linear-gradient(150deg,#b97aaf,#633f80); }
+.give-up-button,.farming-banner button,.developer-action { min-height:44px; }
+.toast { width:max-content; max-width:calc(100vw - 32px); pointer-events:none; }
+@media (max-height:720px) {
+  .arena.farming .farming-banner { top:110px; }
+  .arena.farming .monster-button { top:124px; --monster-scale:.44; }
+}
+@media (max-height:540px) {
+  .arena { flex-basis:220px; }
+  .top-bar { flex-basis:52px; }
+  .bottom-nav { flex-basis:52px; }
+}

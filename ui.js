@@ -3,6 +3,9 @@
 
   const $ = (id) => document.getElementById(id);
   const elements = {
+    goldCapacity: $("goldCapacity"), bagLevel: $("bagLevel"), bagGold: $("bagGold"), upgradeBag: $("upgradeBag"),
+    allGuardian1: $("allGuardian1"), allGuardian10: $("allGuardian10"), forceBalloon: $("forceBalloon"), developerOffline: $("developerOffline"),
+    offlineSummary: $("offlineSummary"), offlineDetails: $("offlineDetails"),
     stage: $("stageValue"), gold: $("goldValue"), stageLabel: $("stageLabel"), name: $("monsterName"), kills: $("killCount"),
     hp: $("hpValue"), hpFill: $("hpFill"), encounterBadge: $("encounterBadge"), attackArea: $("attackArea"),
     nazarIndicator: $("nazarIndicator"), giveUpBoss: $("giveUpBoss"),
@@ -59,7 +62,7 @@
   function renderCombat(state) {
     const monster = state.monster;
     const hpPercent = Math.max(0, Math.min(100, monster.hp / monster.maxHp * 100));
-    const badgeByType = { guardian: "GUARDIAN", regionBoss: "REGION BOSS", mimic: "MIMIC", nazar: "NAZAR" };
+    const badgeByType = { stageBoss: "STAGE BOSS · 10 / 10", guardian: "GUARDIAN", regionBoss: "REGION BOSS", mimic: "MIMIC", nazar: "NAZAR" };
     elements.stage.textContent = formatNumber(state.stage);
     elements.gold.textContent = formatNumber(state.gold);
     elements.stageLabel.textContent = `STAGE ${formatNumber(state.stage)}`;
@@ -74,18 +77,26 @@
     elements.bossTimerValue.textContent = ((state.boss.timeRemainingMs || 0) / 1000).toFixed(1);
     elements.farmingBanner.hidden = !state.progression.farmingBeforeBoss;
     elements.farmingStage.textContent = `FARMING STAGE ${state.stage}`;
-    elements.nextBossHp.textContent = `NEXT BOSS HP: ${formatNumber(Balance.monsterMaxHp(state.progression.pendingBossStage || state.stage + 1))}`;
+    const pendingStage = state.progression.pendingBossStage || state.stage + 1;
+    elements.nextBossHp.textContent = `NEXT BOSS HP: ${formatNumber(state.progression.pendingEncounterType === "stageBoss" ? Balance.normalStageBossHp(pendingStage) : Balance.monsterMaxHp(pendingStage))}`;
     elements.attackArea.classList.toggle("farming", state.progression.farmingBeforeBoss);
-    const nazarEligible = game.isNazarEligible();
-    elements.nazarIndicator.hidden = !state.progression.farmingBeforeBoss;
-    elements.nazarIndicator.classList.toggle("active", nazarEligible);
-    elements.nazarIndicator.querySelector("span").textContent = nazarEligible ? "NAZAR ACTIVE" : "NAZAR";
-    ["normal", "guardian", "regionBoss", "mimic", "nazar"].forEach((type) => elements.monsterButton.classList.toggle(`type-${type}`, monster.type === type));
+    const indicator = game.getNazarIndicatorState();
+    elements.nazarIndicator.hidden = !indicator.visible;
+    elements.nazarIndicator.classList.toggle("active", indicator.active);
+    elements.nazarIndicator.querySelector("span").textContent = indicator.active ? "NAZAR ACTIVE" : "NAZAR INACTIVE";
+    ["normal", "stageBoss", "guardian", "regionBoss", "mimic", "nazar"].forEach((type) => elements.monsterButton.classList.toggle(`type-${type}`, monster.type === type));
     elements.tapStat.textContent = formatNumber(game.getTotalTap());
     elements.dpsStat.textContent = formatNumber(game.getTotalDps());
   }
 
   function renderLutie(state) {
+    const capacity = game.getGoldCapacity();
+    const bagCost = Balance.bagUpgradeCost(state.bagLevel);
+    elements.goldCapacity.textContent = `/ ${formatNumber(capacity)}`;
+    elements.bagLevel.textContent = `BAG Lv. ${state.bagLevel}`;
+    elements.bagGold.textContent = `${formatNumber(state.gold)} / ${formatNumber(capacity)} G`;
+    elements.upgradeBag.textContent = `UPGRADE BAG · ${formatNumber(bagCost)} G`;
+    elements.upgradeBag.disabled = state.gold < bagCost || Balance.bagCapacity(state.bagLevel + 1) <= capacity;
     const quotes = [1, 10, "max"].map((amount) => game.getUpgradeQuote("lutie", amount));
     elements.lutieLevel.textContent = `LV. ${formatNumber(state.lutie.level)}`;
     elements.lutieTap.textContent = formatNumber(game.getTotalTap());
@@ -108,6 +119,12 @@
   }
 
   function updateGuardianValues(state) {
+    [1, 10].forEach((amount) => {
+      const quote = game.getAllGuardianUpgradeQuote(amount);
+      const button = amount === 1 ? elements.allGuardian1 : elements.allGuardian10;
+      button.textContent = `ALL +${amount} · ${formatGold(quote.totalCost)} G`;
+      button.disabled = !quote.levels;
+    });
     elements.guardianGold.textContent = `${formatGold(state.gold)} G`;
     elements.guardianTotalDps.textContent = formatNumber(game.getTotalGuardianDps());
     elements.guardianSort.value = state.settings.guardianSort;
@@ -281,6 +298,19 @@
       return;
     }
     render(state, event);
+    if (["loaded", "reset", "imported"].includes(event.type)) {
+      const summary = event.offlineSummary;
+      elements.offlineSummary.hidden = !summary;
+      if (summary) {
+        const rows = [["Time Away", `${(summary.elapsedMs / 3600000).toFixed(2)} h`], ["Stages Advanced", summary.stagesAdvanced],
+          ["Gold Earned", formatNumber(summary.goldEarned)], ["Uncollected (capacity)", formatNumber(summary.goldLost)],
+          ["Final Stage", summary.finalStage], ["Time Excluded (safety cap)", `${(summary.unprocessedMs / 3600000).toFixed(2)} h`]];
+        elements.offlineDetails.innerHTML = rows.map(([label, value]) => `<dt>${label}</dt><dd>${value}</dd>`).join("");
+        elements.offlineSummary.open = true;
+        showToast("Offline progress applied · summary in LUTIE");
+      }
+    }
+    if (event.type === "balloon") showToast(`BALLOON ↑ +10 STAGES · Stage ${event.destination}`);
     if (["tap", "autoAttack", "skillAttack"].includes(event.type)) {
       const rect = elements.attackArea.getBoundingClientRect();
       const isAuto = event.type === "autoAttack";
@@ -304,6 +334,11 @@
   elements.challengeBoss.addEventListener("click", (event) => { event.stopPropagation(); game.challengeBoss(); });
   elements.giveUpBoss.addEventListener("click", (event) => { event.stopPropagation(); game.giveUpBoss(); });
   elements.lutieUpgrade.addEventListener("click", () => game.upgradeLutie());
+  elements.upgradeBag.addEventListener("click", () => game.upgradeBag());
+  elements.allGuardian1.addEventListener("click", () => game.upgradeAllGuardians(1));
+  elements.allGuardian10.addEventListener("click", () => game.upgradeAllGuardians(10));
+  elements.forceBalloon.addEventListener("click", () => game.forceBalloon());
+  elements.developerOffline.addEventListener("click", () => game.simulateDeveloperOffline());
   elements.lutieUpgrade10.addEventListener("click", () => game.upgradeLutie(10));
   elements.lutieUpgradeMax.addEventListener("click", () => game.upgradeLutie("max"));
   elements.skillGrid.addEventListener("click", (event) => { if (event.target.closest("[data-skill='flare-ray']")) game.useFlareRay(); });
@@ -393,6 +428,10 @@
   });
 
   game.start();
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) game.stop();
+    else game.start();
+  });
   global.addEventListener("beforeunload", () => game.stop());
   global.LutieClicker = Object.freeze({ game, formatNumber });
 })(window);

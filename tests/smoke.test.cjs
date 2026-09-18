@@ -429,7 +429,7 @@ const v1 = {
   monster: { name: "Mossling", isBoss: false, hp: 12, maxHp: context.Balance.monsterBaseHp(9) }
 };
 const migrated = createStartedGame(new MemoryAdapter(v1)).getState();
-assert.equal(migrated.saveVersion, 4, "31. v1 save migrates to v4");
+assert.equal(migrated.saveVersion, 5, "31. v1 save migrates to v5");
 assert.equal(migrated.gold, 123);
 assert.equal(migrated.stage, 9);
 assert.equal(migrated.lutie.level, 7);
@@ -449,7 +449,7 @@ v2.manaStones = [{ id: "v2-stone", level: 20, rarity: "HIGH", power: context.Bal
 const migratedV2Adapter = new MemoryAdapter(v2);
 const migratedV2Game = createStartedGame(migratedV2Adapter);
 const migratedV2 = migratedV2Game.getState();
-assert.equal(migratedV2.saveVersion, 4, "v0.2 save migrates to v4");
+assert.equal(migratedV2.saveVersion, 5, "v0.2 save migrates to v5");
 assert.equal(migratedV2.guardians[0].level, 17);
 assert.equal(migratedV2.guardians[0].reincarnationLevel, 3);
 assert.equal(migratedV2.guardians[0].equippedManaStoneId, "v2-stone");
@@ -490,7 +490,7 @@ assert.equal(derivedAdapter.data.monster.maxHp, undefined, "Persistent payload o
 
 // 32-34: export, invalid import, complete reset.
 const exported = upgradeGame.exportSave();
-assert.equal(JSON.parse(exported).saveVersion, 4, "32. Export produces valid JSON");
+assert.equal(JSON.parse(exported).saveVersion, 5, "32. Export produces valid JSON");
 const beforeInvalidImport = upgradeGame.exportSave();
 assert.equal(upgradeGame.importSave("{bad json").ok, false);
 assert.equal(upgradeGame.exportSave(), beforeInvalidImport, "33. Invalid JSON does not damage current state");
@@ -508,4 +508,4 @@ assert.equal(state.progression.farmingBeforeBoss, false);
 assert.equal(state.run.nazarEscalation, 0);
 assert.equal(upgradeGame.getTotalDps(), 1);
 
-console.log("v0.2.4 smoke test passed: normalized Guardian DPS, centered normal Gold variance, Pages workflow, and prior coverage.");
+console.log("v0.3 legacy smoke test passed: normalized Guardian DPS, centered normal Gold variance, Pages workflow, and prior coverage.");

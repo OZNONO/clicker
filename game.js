@@ -9,6 +9,8 @@
     let autoAttackTimer = null;
     let bossTimer = null;
     let running = false;
+    let offlineMode = false;
+    let offlineSummary = null;
 
     const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -42,6 +44,8 @@
         saveVersion: Balance.constants.SAVE_VERSION,
         updatedAt: new Date(now()).toISOString(),
         gold: 0,
+        bagLevel: 1,
+        lastSavedAt: null,
         stage: 1,
         killsInStage: 0,
         lutie: { level: 1 },
@@ -68,6 +72,10 @@
         const definition = GameData.GUARDIAN_DEFINITIONS.find((item) => item.id === details.guardianId) || GameData.GUARDIAN_DEFINITIONS[0];
         maxHp = Balance.monsterMaxHp(stage);
         name = definition.name;
+        isTimed = true;
+      } else if (type === "stageBoss") {
+        maxHp = Balance.normalStageBossHp(stage);
+        name = `Stage ${stage} Sentinel`;
         isTimed = true;
       } else if (type === "regionBoss") {
         maxHp = Balance.monsterMaxHp(stage);
@@ -149,7 +157,8 @@
     }
 
     function createMonsterForState(target) {
-      const type = target.progression.farmingBeforeBoss ? "normal" : encounterTypeForStage(target.stage) || "normal";
+      const type = target.progression.farmingBeforeBoss ? "normal" : encounterTypeForStage(target.stage)
+        || (target.killsInStage >= Balance.constants.MONSTERS_PER_STAGE - 1 ? "stageBoss" : "normal");
       const guardianId = type === "guardian"
         ? target.progression.pendingGuardianId || GameData.GUARDIAN_DEFINITIONS[0].id
         : null;
@@ -214,13 +223,15 @@
       next.lifetime.highestStage = Math.max(next.run.highestStage, validNumber(next.lifetime.highestStage, next.run.highestStage));
       const expected = createMonsterForState(next);
       const savedMonster = saved.monster;
-      if (savedMonster && ["normal", "guardian", "regionBoss", "mimic", "nazar"].includes(savedMonster.type)) {
+      if (savedMonster && ["normal", "stageBoss", "guardian", "regionBoss", "mimic", "nazar"].includes(savedMonster.type)) {
         const details = { guardianId: savedMonster.guardianId, escalation: Math.max(0, next.run.nazarEscalation - 1) };
         next.monster = createMonster(savedMonster.type, next.stage, details);
-        next.monster.hp = Math.max(1, Math.min(validNumber(savedMonster.hp, next.monster.maxHp), next.monster.maxHp));
+        next.monster.hp = Math.max(Number.MIN_VALUE, Math.min(validNumber(savedMonster.hp, next.monster.maxHp), next.monster.maxHp));
       } else {
         next.monster = expected;
       }
+      // Legacy normal slot ten becomes a full-health progression gate.
+      if (expected.type === "stageBoss" && next.monster.type === "normal") next.monster = expected;
       if (!next.monster.isTimed) next.boss = { timeRemainingMs: null, deadlineAt: null };
       return next;
     }
@@ -228,8 +239,20 @@
     function normalize(saved) {
       if (!saved || typeof saved !== "object") return initialState();
       try {
-        if (saved.saveVersion === 1) return migrateV1(saved);
-        if ([2, 3, Balance.constants.SAVE_VERSION].includes(saved.saveVersion)) return normalizeV2(saved);
+        let next;
+        if (saved.saveVersion === 1) next = migrateV1(saved);
+        if ([2, 3, 4, Balance.constants.SAVE_VERSION].includes(saved.saveVersion)) next = normalizeV2(saved);
+        if (next) {
+          next.saveVersion = Balance.constants.SAVE_VERSION;
+          next.bagLevel = Math.max(1, Math.floor(validNumber(saved.bagLevel, 1)));
+          // Preserve existing wealth by granting enough bag levels, never deleting Gold.
+          if (next.gold > Balance.bagCapacity(next.bagLevel)) {
+            next.bagLevel = Math.max(next.bagLevel, Balance.bagLevelForGold(next.gold));
+            while (next.gold > Balance.bagCapacity(next.bagLevel)) next.bagLevel += 1;
+          }
+          next.lastSavedAt = Number.isFinite(saved.lastSavedAt) && saved.lastSavedAt >= 0 ? saved.lastSavedAt : null;
+          return next;
+        }
       } catch (_error) {
         return initialState();
       }
@@ -242,7 +265,7 @@
 
     function isImportCandidate(candidate) {
       return candidate && typeof candidate === "object"
-        && [1, 2, 3, Balance.constants.SAVE_VERSION].includes(candidate.saveVersion)
+        && [1, 2, 3, 4, Balance.constants.SAVE_VERSION].includes(candidate.saveVersion)
         && Number.isFinite(candidate.gold)
         && Number.isFinite(candidate.stage)
         && candidate.lutie && Number.isFinite(candidate.lutie.level);
@@ -253,6 +276,8 @@
         saveVersion: Balance.constants.SAVE_VERSION,
         updatedAt: state.updatedAt,
         gold: state.gold,
+        bagLevel: state.bagLevel,
+        lastSavedAt: state.lastSavedAt,
         stage: state.stage,
         killsInStage: state.killsInStage,
         lutie: { level: state.lutie.level },
@@ -285,12 +310,19 @@
     }
 
     function save() {
-      const saved = storageAdapter.saveGame(serializeState());
+      if (offlineMode) return;
+      const savedAt = Math.max(now(), state.lastSavedAt || 0);
+      if (state.monster.isTimed && state.boss.deadlineAt !== null) {
+        state.boss.timeRemainingMs = Math.max(0, state.boss.deadlineAt - now());
+      }
+      const saved = storageAdapter.saveGame({ ...serializeState(), lastSavedAt: savedAt });
+      state.lastSavedAt = savedAt;
       state.updatedAt = saved.updatedAt || state.updatedAt;
       return getState();
     }
 
     function emit(type, detail = {}) {
+      if (offlineMode) return;
       const snapshot = getState();
       listeners.forEach((listener) => listener(snapshot, { type, ...detail }));
     }
@@ -347,8 +379,31 @@
 
     function addGold(baseGold) {
       const reward = calculateGoldReward(baseGold);
-      state.gold += reward;
-      return reward;
+      return awardGold(reward).earned;
+    }
+
+    function getGoldCapacity() {
+      return Balance.bagCapacity(state.bagLevel);
+    }
+
+    function awardGold(reward) {
+      const earned = Math.min(Math.max(0, getGoldCapacity() - state.gold), Math.max(0, reward));
+      state.gold += earned;
+      if (offlineMode) {
+        offlineSummary.goldEarned += earned;
+        offlineSummary.goldLost += Math.max(0, reward - earned);
+      }
+      return { earned, lost: Math.max(0, reward - earned) };
+    }
+
+    function upgradeBag() {
+      const cost = Balance.bagUpgradeCost(state.bagLevel);
+      if (state.gold < cost || Balance.bagCapacity(state.bagLevel + 1) <= getGoldCapacity()) return false;
+      state.gold -= cost;
+      state.bagLevel += 1;
+      save();
+      emit("bagUpgraded");
+      return true;
     }
 
     function clearBossTimerState() {
@@ -359,7 +414,7 @@
     }
 
     function ensureBossTimer() {
-      if (!running || bossTimer !== null || !state.monster.isTimed) return;
+      if (offlineMode || !running || bossTimer !== null || !state.monster.isTimed) return;
       bossTimer = setInterval(bossTimerTick, Balance.constants.BOSS_TIMER_TICK_MS);
     }
 
@@ -372,7 +427,7 @@
 
     function chooseGuardianForEncounter() {
       if (state.progression.pendingGuardianId) return state.progression.pendingGuardianId;
-      const definition = GameData.selectGuardianDefinition(state.run.encounteredGuardianIds, random());
+      const definition = GameData.selectGuardianDefinition(state.run.encounteredGuardianIds, offlineMode ? 0 : random());
       state.progression.pendingGuardianId = definition.id;
       if (!state.run.encounteredGuardianIds.includes(definition.id)) state.run.encounteredGuardianIds.push(definition.id);
       return definition.id;
@@ -381,6 +436,10 @@
     function isNazarEligible() {
       return state.progression.farmingBeforeBoss
         && getTotalDps() >= Balance.monsterBaseHp(state.stage) * Balance.constants.NAZAR_DPS_THRESHOLD;
+    }
+
+    function getNazarIndicatorState() {
+      return { visible: state.progression.farmingBeforeBoss, active: isNazarEligible() || state.monster.type === "nazar" };
     }
 
     function spawnNazar() {
@@ -395,12 +454,14 @@
         state.monster = createMonster("guardian", state.stage, { guardianId: chooseGuardianForEncounter() });
       } else if (encounterType === "regionBoss") {
         state.monster = createMonster("regionBoss", state.stage);
-      } else if (allowNazar && isNazarEligible() && random() < Balance.constants.NAZAR_CHANCE) {
+      } else if (!state.progression.farmingBeforeBoss && state.killsInStage >= Balance.constants.MONSTERS_PER_STAGE - 1) {
+        state.monster = createMonster("stageBoss", state.stage);
+      } else if (!offlineMode && allowNazar && isNazarEligible() && random() < Balance.constants.NAZAR_CHANCE) {
         spawnNazar();
       } else {
         state.monster = createMonster("normal", state.stage);
       }
-      if (state.monster.isTimed && startTimer) beginBossTimer();
+      if (state.monster.isTimed && (startTimer || state.boss.timeRemainingMs === null)) beginBossTimer();
     }
 
     function enterStage(stage) {
@@ -421,7 +482,7 @@
       const rarity = forcedRarity || rollStoneRarity();
       const stone = {
         id: `stone-${state.lifetime.nextStoneId++}`,
-        level: state.stage,
+        level: Math.max(1, Math.floor(state.stage)),
         rarity,
         power: Balance.manaStonePowerForRarity(rarity),
         equippedGuardianId: null
@@ -460,11 +521,12 @@
     }
 
     function completeTimedEncounter(defeatedMonster) {
+      const clearedStage = state.stage;
       let acquisition = null;
       let stone = null;
       if (defeatedMonster.type === "guardian") acquisition = recruitGuardian(defeatedMonster.guardianId);
       if (defeatedMonster.type === "regionBoss") {
-        const rarity = random() < Balance.constants.REGION_BOSS_HIGH_STONE_CHANCE ? "HIGH" : "NORMAL";
+        const rarity = !offlineMode && random() < Balance.constants.REGION_BOSS_HIGH_STONE_CHANCE ? "HIGH" : "NORMAL";
         stone = createManaStone(rarity);
         if (state.stage === Balance.constants.REGION_LENGTH) {
           state.progression.v01Cleared = true;
@@ -473,7 +535,25 @@
       }
       clearEncounterProgression();
       enterStage(state.stage + 1);
+      if (!offlineMode && defeatedMonster.type === "regionBoss") tryBalloon(clearedStage);
       return { acquisition, stone };
+    }
+
+    function tryBalloon(clearedStage, forced = false) {
+      if (!forced && (state.lifetime.totalReincarnations < 1 || !Balance.isRegionBossStage(clearedStage)
+        || random() >= Balance.constants.BALLOON_TRIGGER_CHANCE)) return false;
+      const destination = Balance.balloonDestination(clearedStage);
+      clearEncounterProgression();
+      enterStage(destination);
+      emit("balloon", { destination, forced });
+      return true;
+    }
+
+    function forceBalloon() {
+      // Dev-only: skip ten stages from the current position, with no rewards.
+      tryBalloon(state.stage - 1, true);
+      save();
+      return true;
     }
 
     function handleDefeat(defeatedMonster) {
@@ -481,15 +561,15 @@
       let stone = null;
       let acquisition = null;
       if (defeatedMonster.type === "normal") {
-        reward = addGold(rollNormalMonsterGold(Balance.monsterGold(state.stage)));
+        reward = addGold(offlineMode ? Balance.monsterGold(state.stage) : rollNormalMonsterGold(Balance.monsterGold(state.stage)));
         state.killsInStage += 1;
         if (state.progression.farmingBeforeBoss) {
           state.killsInStage %= Balance.constants.MONSTERS_PER_STAGE;
-          if (random() < Balance.constants.MIMIC_CHANCE) state.monster = createMonster("mimic", state.stage);
+          if (!offlineMode && random() < Balance.constants.MIMIC_CHANCE) state.monster = createMonster("mimic", state.stage);
           else spawnCurrentMain();
-        } else if (state.killsInStage >= Balance.constants.MONSTERS_PER_STAGE) {
-          enterStage(state.stage + 1);
-        } else if (random() < Balance.constants.MIMIC_CHANCE) {
+        } else if (state.killsInStage >= Balance.constants.MONSTERS_PER_STAGE - 1) {
+          spawnCurrentMain({ allowNazar: false, startTimer: true });
+        } else if (!offlineMode && random() < Balance.constants.MIMIC_CHANCE) {
           state.monster = createMonster("mimic", state.stage);
         } else {
           spawnCurrentMain({ allowNazar: false });
@@ -511,6 +591,10 @@
     }
 
     function dealDamage(amount, source) {
+      if (state.monster.isTimed && state.boss.deadlineAt !== null && now() >= state.boss.deadlineAt) {
+        failBoss();
+        return false;
+      }
       if (!Number.isFinite(amount) || amount <= 0) return false;
       state.monster.hp -= amount;
       let defeated = false;
@@ -554,7 +638,7 @@
       if (requested !== "max") {
         while (levels < limit) {
           const cost = costForLevel(level + levels);
-          if (!Number.isFinite(cost) || cost < 1) return { levels: 0, totalCost: 0 };
+          if (!Number.isFinite(cost) || cost < 1) return { levels: 0, totalCost: Infinity };
           totalCost += cost;
           levels += 1;
         }
@@ -600,6 +684,94 @@
       return true;
     }
 
+    function getAllGuardianUpgradeQuote(amount = 1) {
+      if (![1, 10].includes(amount)) return { levels: 0, totalCost: 0, count: 0 };
+      const acquired = state.guardians.filter((guardian) => guardian.activeThisRun);
+      const totalCost = acquired.reduce((sum, guardian) => sum
+        + purchaseQuote(guardian.level, Number.MAX_VALUE, Balance.guardianUpgradeCost, amount).totalCost, 0);
+      return { levels: acquired.length && Number.isFinite(totalCost) && totalCost > 0 && totalCost <= state.gold ? amount : 0, totalCost, count: acquired.length };
+    }
+
+    function upgradeAllGuardians(amount = 1) {
+      const quote = getAllGuardianUpgradeQuote(amount);
+      if (!quote.levels) return false;
+      state.guardians.filter((guardian) => guardian.activeThisRun).forEach((guardian) => { guardian.level += amount; });
+      state.gold -= quote.totalCost;
+      save();
+      emit("allGuardiansUpgraded", quote);
+      return true;
+    }
+
+    // Temporary continuous-DPS model: visit completed encounters, never wall-clock ticks.
+    // Farming is batched arithmetically. All writes/events are suppressed until settlement.
+    function applyOfflineProgress(forcedElapsedMs = null) {
+      const elapsed = forcedElapsedMs === null
+        ? (state.lastSavedAt === null ? 0 : Math.max(0, now() - state.lastSavedAt))
+        : Math.max(0, validNumber(forcedElapsedMs, 0));
+      offlineSummary = null;
+      if (!elapsed) {
+        if (state.monster.isTimed) state.boss.deadlineAt = now() + (state.boss.timeRemainingMs ?? Balance.timedEncounterLimit(state.stage));
+        return null;
+      }
+      const processedMs = Math.min(elapsed, Balance.constants.OFFLINE_MAX_MS);
+      offlineSummary = { elapsedMs: elapsed, processedMs, stagesAdvanced: 0, goldEarned: 0, goldLost: 0, finalStage: state.stage, encounters: 0, unprocessedMs: elapsed - processedMs };
+      let remaining = processedMs / 1000;
+      offlineMode = true;
+      try {
+        // Existing special monsters are omitted too; never fabricate their loot/progression.
+        if (["mimic", "nazar"].includes(state.monster.type)) spawnCurrentMain({ allowNazar: false });
+        while (remaining > 0 && offlineSummary.encounters < Balance.constants.OFFLINE_MAX_ENCOUNTERS) {
+          const dps = getTotalDps();
+          if (!Number.isFinite(dps) || dps <= 0 || !Number.isFinite(state.monster.hp)) break;
+          if (state.progression.farmingBeforeBoss) {
+            const hp = Balance.monsterBaseHp(state.stage);
+            const damage = remaining * dps;
+            if (!Number.isFinite(damage) || !Number.isFinite(hp)) break;
+            const kills = damage < state.monster.hp ? 0 : 1 + Math.floor((damage - state.monster.hp) / hp);
+            if (kills) {
+              awardGold(kills * calculateGoldReward(Balance.monsterGold(state.stage)));
+              state.killsInStage = (state.killsInStage + kills) % Balance.constants.MONSTERS_PER_STAGE;
+              state.monster.hp = hp - ((damage - state.monster.hp) % hp);
+            } else state.monster.hp -= damage;
+            remaining = 0;
+            break;
+          }
+          const killSeconds = state.monster.hp / dps;
+          const limitSeconds = state.monster.isTimed ? (state.boss.timeRemainingMs ?? Balance.timedEncounterLimit(state.stage)) / 1000 : Infinity;
+          // Timeout consumes its remaining timer, then uses the shared camping transition.
+          if (limitSeconds < killSeconds && remaining >= limitSeconds) {
+            remaining -= limitSeconds;
+            failBoss();
+            offlineSummary.encounters += 1;
+          } else if (killSeconds <= remaining && killSeconds <= limitSeconds) {
+            remaining -= killSeconds;
+            const oldStage = state.stage;
+            handleDefeat({ ...state.monster });
+            offlineSummary.stagesAdvanced += Math.max(0, state.stage - oldStage);
+            offlineSummary.encounters += 1;
+          } else {
+            state.monster.hp -= remaining * dps;
+            if (state.monster.isTimed) state.boss.timeRemainingMs = Math.max(0, (limitSeconds - remaining) * 1000);
+            remaining = 0;
+          }
+        }
+        offlineSummary.unprocessedMs += remaining * 1000;
+        offlineSummary.processedMs -= remaining * 1000;
+        offlineSummary.finalStage = state.stage;
+      } finally {
+        offlineMode = false;
+      }
+      if (state.monster.isTimed) state.boss.deadlineAt = now() + state.boss.timeRemainingMs;
+      return clone(offlineSummary);
+    }
+
+    function simulateDeveloperOffline() {
+      applyOfflineProgress(60 * 60 * 1000);
+      save();
+      emit("loaded", { offlineSummary, developer: true });
+      return clone(offlineSummary);
+    }
+
     function failBoss() {
       if (!state.monster.isTimed) return false;
       const failed = { stage: state.stage, type: state.monster.type, guardianId: state.monster.guardianId };
@@ -608,7 +780,7 @@
       state.progression.pendingBossStage = failed.stage;
       state.progression.pendingEncounterType = failed.type;
       if (failed.guardianId) state.progression.pendingGuardianId = failed.guardianId;
-      state.stage = Math.max(1, failed.stage - 1);
+      state.stage = failed.type === "stageBoss" ? failed.stage : Math.max(1, failed.stage - 1);
       state.killsInStage = 0;
       clearBossTimerState();
       state.monster = createMonster("normal", state.stage);
@@ -627,7 +799,7 @@
     function challengeBoss() {
       if (!state.progression.bossRetryAvailable || !state.progression.pendingBossStage) return false;
       state.stage = state.progression.pendingBossStage;
-      state.killsInStage = 0;
+      state.killsInStage = state.progression.pendingEncounterType === "stageBoss" ? Balance.constants.MONSTERS_PER_STAGE - 1 : 0;
       state.progression.bossRetryAvailable = false;
       state.progression.farmingBeforeBoss = false;
       const type = state.progression.pendingEncounterType || encounterTypeForStage(state.stage);
@@ -651,6 +823,7 @@
     }
 
     function addDeveloperGold() {
+      // Explicit dev-only capacity bypass. Normal rewards never increase over-cap Gold.
       state.gold += 100000;
       save();
       emit("developerGoldAdded", { amount: 100000 });
@@ -713,6 +886,7 @@
         if (!keptStoneIds.has(guardian.equippedManaStoneId)) guardian.equippedManaStoneId = null;
       });
       state.gold = 0;
+      if (!Balance.constants.BAG_PERSISTS_REINCARNATION) state.bagLevel = 1;
       state.stage = 1;
       state.killsInStage = 0;
       state.lutie.level = 1;
@@ -763,6 +937,7 @@
       clearInterval(bossTimer);
       bossTimer = null;
       state = initialState();
+      offlineSummary = null;
       save();
       emit("reset");
     }
@@ -785,10 +960,14 @@
         return { ok: false, error: "Invalid JSON" };
       }
       if (!isImportCandidate(candidate)) return { ok: false, error: "Invalid save structure" };
-      const imported = candidate.saveVersion === 1 ? migrateV1(candidate) : normalizeV2(candidate);
+      const imported = normalize(candidate);
       clearInterval(bossTimer);
       bossTimer = null;
       state = imported;
+      // Imports establish a fresh checkpoint; an old exported timestamp cannot pay twice.
+      state.lastSavedAt = now();
+      offlineSummary = null;
+      if (state.monster.isTimed) state.boss.deadlineAt = now() + (state.boss.timeRemainingMs ?? Balance.timedEncounterLimit(state.stage));
       restoreActiveTimer();
       save();
       emit("imported");
@@ -818,13 +997,15 @@
       clearInterval(bossTimer);
       bossTimer = null;
       state = normalize(storageAdapter.loadGame());
+      applyOfflineProgress();
       restoreActiveTimer();
       save();
       autoAttackTimer = setInterval(autoAttack, Balance.constants.AUTO_ATTACK_INTERVAL_MS);
-      emit("loaded");
+      emit("loaded", { offlineSummary });
     }
 
     function stop() {
+      if (running) save();
       running = false;
       clearInterval(autoAttackTimer);
       clearInterval(bossTimer);
@@ -834,6 +1015,7 @@
 
     return Object.freeze({
       start, stop, attack, tap: attack, autoAttack, useFlareRay, bossTimerTick, challengeBoss, giveUpBoss, forceNazar, addDeveloperGold,
+      getGoldCapacity, upgradeBag, forceBalloon, getAllGuardianUpgradeQuote, upgradeAllGuardians, simulateDeveloperOffline, getNazarIndicatorState,
       upgradeLutie, upgradeGuardian, getUpgradeQuote, getTotalTap, getTotalDps, getTotalGuardianDps,
       getGuardianFinalDps, getEffectiveStoneLevel, calculateGoldReward, rollNormalMonsterGold, isNazarEligible, equipManaStone, unequipManaStone,
       getReincarnationPreview, reincarnate, upgradeArtifact, setSetting, acknowledgeClear, reset,

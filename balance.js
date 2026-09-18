@@ -3,7 +3,17 @@
 
   // All unverified values below are temporary reconstruction values.
   const constants = Object.freeze({
-    SAVE_VERSION: 4,
+    SAVE_VERSION: 5,
+    NORMAL_STAGE_BOSS_TIME_LIMIT_MS: 30000,
+    NORMAL_STAGE_BOSS_HP_MULTIPLIER: 3,
+    BAG_INITIAL_CAPACITY: 10000,
+    BAG_CAPACITY_GROWTH: 2,
+    BAG_UPGRADE_COST_RATIO: 0.5,
+    BAG_PERSISTS_REINCARNATION: true,
+    BALLOON_TRIGGER_CHANCE: 0.05,
+    BALLOON_SKIP_STAGES: 10,
+    OFFLINE_MAX_MS: 7 * 24 * 60 * 60 * 1000,
+    OFFLINE_MAX_ENCOUNTERS: 10000,
     MONSTERS_PER_STAGE: 10,
     GUARDIAN_ENCOUNTER_OFFSET: 5,
     REGION_LENGTH: 10,
@@ -14,7 +24,7 @@
     BASE_DPS: 1,
     LUTIE_TAP_GROWTH: 1.08,
     LUTIE_UPGRADE_BASE_COST: 10,
-    LUTIE_UPGRADE_COST_GROWTH: 1.12,
+    LUTIE_UPGRADE_COST_GROWTH: 1.09,
     MONSTER_BASE_HP: 10,
     MONSTER_HP_GROWTH: 1.15,
     MONSTER_BASE_GOLD: 2,
@@ -24,10 +34,9 @@
     REGION_BOSS_HP_MULTIPLIER: 10,
     GUARDIAN_BASE_DPS: 11,
     GUARDIAN_INITIAL_COST: 25,
-    GUARDIAN_COST_ORDER_SCALE: 0.25,
     GUARDIAN_BASE_DPS_SCALE: 0.25,
     GUARDIAN_DPS_GROWTH: 1.035,
-    GUARDIAN_COST_GROWTH: 1.13,
+    GUARDIAN_COST_GROWTH: 1.07,
     GUARDIAN_DUPLICATE_GOLD_MULTIPLIER: 10,
     GUARDIAN_REINCARNATION_BONUS: 0.10,
     AUTO_ATTACK_INTERVAL_MS: 1000,
@@ -56,6 +65,11 @@
 
   const Balance = Object.freeze({
     constants,
+    bagCapacity: (level) => Math.min(Number.MAX_VALUE, constants.BAG_INITIAL_CAPACITY * Math.pow(constants.BAG_CAPACITY_GROWTH, level - 1)),
+    bagUpgradeCost: (level) => Math.floor(Balance.bagCapacity(level) * constants.BAG_UPGRADE_COST_RATIO),
+    bagLevelForGold: (gold) => Math.max(1, 1 + Math.ceil(Math.log(Math.max(1, gold / constants.BAG_INITIAL_CAPACITY)) / Math.log(constants.BAG_CAPACITY_GROWTH))),
+    normalStageBossHp: (stage) => Balance.monsterBaseHp(stage) * constants.NORMAL_STAGE_BOSS_HP_MULTIPLIER,
+    balloonDestination: (clearedStage) => clearedStage + 1 + constants.BALLOON_SKIP_STAGES,
     lutieTap: (level) => Math.max(1, safeFloor(level * Math.pow(constants.LUTIE_TAP_GROWTH, level - 1))),
     lutieUpgradeCost: (level) => Math.max(1, safeFloor(constants.LUTIE_UPGRADE_BASE_COST * Math.pow(constants.LUTIE_UPGRADE_COST_GROWTH, level - 1))),
     monsterBaseHp: (stage) => Math.max(1, safeFloor(constants.MONSTER_BASE_HP * Math.pow(constants.MONSTER_HP_GROWTH, stage - 1))),
@@ -66,7 +80,8 @@
       return this.isGuardianEncounterStage(stage) || this.isRegionBossStage(stage);
     },
     timedEncounterLimit(stage) {
-      return this.isGuardianEncounterStage(stage) ? constants.GUARDIAN_ENCOUNTER_TIME_LIMIT_MS : constants.REGION_BOSS_TIME_LIMIT_MS;
+      if (this.isGuardianEncounterStage(stage)) return constants.GUARDIAN_ENCOUNTER_TIME_LIMIT_MS;
+      return this.isRegionBossStage(stage) ? constants.REGION_BOSS_TIME_LIMIT_MS : constants.NORMAL_STAGE_BOSS_TIME_LIMIT_MS;
     },
     bossMultiplier(stage) {
       return this.isGuardianEncounterStage(stage) ? constants.GUARDIAN_ENCOUNTER_HP_MULTIPLIER : constants.REGION_BOSS_HP_MULTIPLIER;
@@ -76,7 +91,7 @@
       return this.isBossStage(stage) ? base * this.bossMultiplier(stage) : base;
     },
     guardianBaseDps: (level, baseDps) => Math.max(1, safeFloor(baseDps * constants.GUARDIAN_BASE_DPS_SCALE * level * Math.pow(constants.GUARDIAN_DPS_GROWTH, level - 1))),
-    guardianUpgradeCost: (level, unlockOrder = 1) => Math.max(1, safeFloor(constants.GUARDIAN_INITIAL_COST * (1 + (unlockOrder - 1) * constants.GUARDIAN_COST_ORDER_SCALE) * Math.pow(constants.GUARDIAN_COST_GROWTH, level - 1))),
+    guardianUpgradeCost: (level) => Math.max(1, safeFloor(constants.GUARDIAN_INITIAL_COST * Math.pow(constants.GUARDIAN_COST_GROWTH, level - 1))),
     reincarnationStars: (highestStage) => Math.max(1, safeFloor(highestStage / 10)),
     artifactUpgradeCost: (level) => level + 1,
     artifactMultiplier: (level) => 1 + level * constants.ARTIFACT_BONUS_PER_LEVEL,
