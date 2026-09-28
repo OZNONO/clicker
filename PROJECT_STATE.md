@@ -1,8 +1,8 @@
-# LUTIE CLICKER v0.4
+# LUTIE CLICKER v0.4.1
 
 Personal Vanilla HTML/CSS/JS prototype reconstructed from surviving material and memories of a discontinued game. It runs through `file://` and as a GitHub Pages project site. Scripts load in order: balance → data → storage → game → i18n → UI. Rules marked temporary are implementation policy, not claims about the original game.
 
-v0.4 is the **Guardian progression and early balance pass**. It preserves v0.3.2 combat feedback, progression systems, offline settlement, Balloon semantics, storage adapter, localization structure and derived-state approach.
+v0.4 is the **Guardian progression and early balance pass**. v0.4.1 fixes DPS-only ninth-normal kills so the newly created boss intro consumes elapsed time before any combat deadline, damage or timeout evaluation. It preserves v0.3.2 combat feedback, progression systems, offline settlement, Balloon semantics, storage adapter, localization structure and derived-state approach.
 
 ## Confirmed or explicitly requested v0.4 rules
 
@@ -38,6 +38,7 @@ v0.4 is the **Guardian progression and early balance pass**. It preserves v0.3.2
 - Killing the ninth normal creates the boss immediately but sets authoritative `bossIntro`: ordinary bosses show a short WARNING; Guardian and Region-final bosses show WARNING plus a data-driven name cut-in.
 - TAP, keyboard and automatic DPS cannot damage during `bossIntro`. The 30-second timer stays null and starts only after transition time is consumed.
 - DOM animation completion is not authoritative. Live/offline elapsed time consumes saved intro duration; game-state progression never waits for an animation callback.
+- The live automatic-DPS loop checks `bossIntro` inside every encounter transition iteration. If that same tick creates a boss, its remaining elapsed time advances only the intro; a null combat timer is never converted into a deadline.
 - Intro remaining milliseconds persist and deadlines reanchor on load. Typed failure, Balloon rollback, reset and reincarnation clear or restore it safely, avoiding stale callbacks during rapid changes/reload.
 - v0.3.2 idle wrapper, hit visual, death ghost, spawn animation, 100ms elapsed DPS and approximately one-second DPS popup remain separate and unchanged.
 

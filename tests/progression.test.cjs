@@ -265,6 +265,86 @@ test('v0.4 ordinary WARNING blocks damage and starts the boss timer only after t
   assert.equal(session.game.getState().monster.hp, bossHp - session.game.getTotalTap());
 });
 
+test('v0.4.1 DPS-only ninth-normal kill enters WARNING without an immediate boss failure', () => {
+  const seed = active(fresh(), [50]);
+  seed.stage = 1; seed.killsInStage = 8; seed.monster = { type: 'normal', hp: 1 };
+  const { game, setClock } = setup(seed);
+  setClock(1_000_100);
+  game.automaticTick();
+  const state = game.getState();
+  assert.equal(state.progression.farmingBeforeBoss, false);
+  assert.equal(state.monster.type, 'stageBoss');
+  assert.ok(state.bossIntro);
+  assert.equal(state.boss.timeRemainingMs, null);
+  assert.equal(state.boss.deadlineAt, null);
+});
+
+for (const [stage, type, duration] of [
+  [1, 'stageBoss', B.constants.BOSS_WARNING_DURATION_MS],
+  [5, 'guardian', B.constants.BOSS_WARNING_DURATION_MS + B.constants.GUARDIAN_CUTIN_DURATION_MS],
+  [10, 'regionBoss', B.constants.BOSS_WARNING_DURATION_MS + B.constants.GUARDIAN_CUTIN_DURATION_MS]
+]) test(`v0.4.1 DPS-only Stage ${stage} ninth-normal kill starts ${type} intro before its timer`, () => {
+  const seed = active(fresh(), [1]);
+  seed.stage = stage; seed.killsInStage = 8; seed.monster = { type: 'normal', hp: 0.3 };
+  const { game, setClock } = setup(seed, 0, () => 0.55);
+  setClock(1_000_100);
+  game.automaticTick();
+  let state = game.getState();
+  assert.equal(state.monster.type, type);
+  assert.equal(state.bossIntro.remainingMs, duration);
+  assert.equal(state.boss.timeRemainingMs, null);
+  assert.equal(state.boss.deadlineAt, null);
+  assert.equal(state.progression.farmingBeforeBoss, false);
+  setClock(1_000_100 + duration);
+  game.automaticTick();
+  state = game.getState();
+  assert.equal(state.bossIntro, null);
+  assert.equal(state.boss.timeRemainingMs, 30000);
+  assert.equal(state.boss.deadlineAt, 1_000_100 + duration + 30000);
+  assert.equal(state.progression.farmingBeforeBoss, false);
+});
+
+test('v0.4.1 TAP, DPS and mixed ninth-normal kills produce the same intro lifecycle state', () => {
+  const makeSeed = () => {
+    const seed = active(fresh(), [1]);
+    seed.stage = 5; seed.killsInStage = 8; seed.monster = { type: 'normal', hp: 1 };
+    return seed;
+  };
+  const tap = setup(makeSeed(), 0, () => 0.55);
+  tap.game.attack();
+  const dpsSeed = makeSeed(); dpsSeed.monster.hp = 3;
+  const dps = setup(dpsSeed, 0, () => 0.55); dps.setClock(1_001_000); dps.game.automaticTick();
+  const mixedSeed = makeSeed(); mixedSeed.monster.hp = 4;
+  const mixed = setup(mixedSeed, 0, () => 0.55); mixed.game.attack(); mixed.setClock(1_001_000); mixed.game.automaticTick();
+  const snapshot = state => ({
+    stage: state.stage, killsInStage: state.killsInStage, monsterType: state.monster.type,
+    guardianId: state.monster.guardianId, intro: state.bossIntro && state.bossIntro.remainingMs,
+    timer: state.boss.timeRemainingMs, deadline: state.boss.deadlineAt,
+    farming: state.progression.farmingBeforeBoss
+  });
+  assert.deepEqual(snapshot(dps.game.getState()), snapshot(tap.game.getState()));
+  assert.deepEqual(snapshot(mixed.game.getState()), snapshot(tap.game.getState()));
+});
+
+test('v0.4.1 intro time cannot timeout a boss and the 30-second deadline begins at intro completion', () => {
+  const seed = active(fresh(), [1]);
+  seed.stage = 10; seed.killsInStage = 8; seed.monster = { type: 'normal', hp: 0.3 };
+  const { game, setClock } = setup(seed, 0, () => 0.55);
+  setClock(1_000_100); game.automaticTick();
+  const duration = game.getState().bossIntro.remainingMs;
+  const bossHp = game.getState().monster.hp;
+  setClock(1_000_100 + duration - 1); game.automaticTick();
+  assert.equal(game.getState().monster.hp, bossHp);
+  assert.equal(game.getState().boss.timeRemainingMs, null);
+  assert.equal(game.getState().progression.farmingBeforeBoss, false);
+  setClock(1_000_100 + duration); game.automaticTick();
+  assert.equal(game.getState().boss.timeRemainingMs, 30000);
+  setClock(1_000_100 + duration + 29999); game.automaticTick();
+  assert.equal(game.getState().progression.farmingBeforeBoss, false);
+  setClock(1_000_100 + duration + 30000); game.automaticTick();
+  assert.equal(game.getState().progression.farmingBeforeBoss, true);
+});
+
 test('v0.4 Guardian WARNING includes cut-in time without consuming its 30-second timer', () => {
   const seed = fresh(); seed.stage = 5; seed.killsInStage = 8; seed.monster = { type: 'normal', hp: 1 };
   const session = setup(seed, 0, () => 0.55);

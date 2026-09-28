@@ -124,6 +124,34 @@ const http = require('node:http');
     assert.equal(await page.locator('#bossIntroOverlay').isVisible(), false);
     assert.equal(await page.locator('#bossTimerWrap').isVisible(), true, 'Guardian timer starts only after cut-in');
 
+    await page.evaluate(() => {
+      const game = LutieClicker.game;
+      const seed = JSON.parse(game.exportSave());
+      seed.stage = 5; seed.killsInStage = 8; seed.lutie.level = 1;
+      seed.progression = { ...seed.progression, farmingBeforeBoss: false, bossRetryAvailable: false, pendingBossStage: null, pendingEncounterType: null, pendingGuardianId: null };
+      seed.guardians.forEach((guardian, index) => Object.assign(guardian, {
+        discovered: index === 0, unlocked: index === 0, activeThisRun: index === 0, level: 1
+      }));
+      seed.monster = { type: 'normal', hp: 0.3 }; seed.bossIntro = null;
+      game.importSave(JSON.stringify(seed)); game.start();
+    });
+    await page.waitForTimeout(250);
+    const dpsIntro = await page.evaluate(() => {
+      const state = LutieClicker.game.getState();
+      return { type: state.monster.type, intro: Boolean(state.bossIntro), timer: state.boss.timeRemainingMs, farming: state.progression.farmingBeforeBoss };
+    });
+    assert.deepEqual(dpsIntro, { type: 'guardian', intro: true, timer: null, farming: false }, 'DPS-only ninth-normal kill remains in Guardian intro without failing');
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => LutieClicker.game.stop());
+    const dpsBoss = await page.evaluate(() => {
+      const state = LutieClicker.game.getState();
+      return { type: state.monster.type, intro: state.bossIntro, timer: state.boss.timeRemainingMs, farming: state.progression.farmingBeforeBoss };
+    });
+    assert.equal(dpsBoss.type, 'guardian');
+    assert.equal(dpsBoss.intro, null);
+    assert.ok(dpsBoss.timer > 29000 && dpsBoss.timer <= 30000);
+    assert.equal(dpsBoss.farming, false, 'DPS-only Guardian combat starts normally after cut-in');
+
     const animationState = await page.evaluate(() => {
       const idle = document.querySelector('.monster-idle');
       const visual = document.querySelector('.monster-visual');

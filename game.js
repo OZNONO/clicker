@@ -773,17 +773,21 @@
       try {
         let remaining = elapsed;
         let activeCombatElapsed = elapsed;
-        if (state.bossIntro) {
-          const introStep = Math.min(remaining, state.bossIntro.remainingMs);
-          state.bossIntro.remainingMs -= introStep;
-          cursor += introStep;
-          remaining -= introStep;
-          activeCombatElapsed -= introStep;
-          state.bossIntro.deadlineAt = cursor + state.bossIntro.remainingMs;
-          if (state.bossIntro.remainingMs <= 0) finishBossIntro(cursor);
-        }
         let encounters = 0;
-        while (remaining > 0 && encounters++ < Balance.constants.OFFLINE_MAX_ENCOUNTERS) {
+        while (remaining > 0 && encounters < Balance.constants.OFFLINE_MAX_ENCOUNTERS) {
+          // Intro is a timed state of its own. Consume it before consulting the
+          // combat deadline, including when this same DPS tick just spawned it.
+          if (state.bossIntro) {
+            const introStep = Math.min(remaining, state.bossIntro.remainingMs);
+            state.bossIntro.remainingMs -= introStep;
+            cursor += introStep;
+            remaining -= introStep;
+            activeCombatElapsed -= introStep;
+            state.bossIntro.deadlineAt = cursor + state.bossIntro.remainingMs;
+            if (state.bossIntro.remainingMs <= 0) finishBossIntro(cursor);
+            continue;
+          }
+          encounters += 1;
           const dps = getTotalDps();
           if (!Number.isFinite(dps) || dps <= 0) break;
           const monster = state.monster;
@@ -798,7 +802,9 @@
             dealDamage(damage, "auto");
             autoDisplayDamage += damage;
           }
-          if (state.monster !== monster && state.monster.isTimed) state.boss.deadlineAt = cursor + state.boss.timeRemainingMs;
+          if (state.monster !== monster && state.monster.isTimed && !state.bossIntro) {
+            state.boss.deadlineAt = cursor + (state.boss.timeRemainingMs ?? Balance.timedEncounterLimit(state.stage));
+          }
           if (state.monster === monster && timeToTimeout <= step) {
             failBoss();
             if (state.monster.isTimed) state.boss.deadlineAt = cursor + state.boss.timeRemainingMs;
