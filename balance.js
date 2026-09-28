@@ -3,11 +3,13 @@
 
   // All unverified values below are temporary reconstruction values.
   const constants = Object.freeze({
-    SAVE_VERSION: 6,
+    SAVE_VERSION: 7,
     NORMAL_STAGE_BOSS_TIME_LIMIT_MS: 30000,
     NORMAL_STAGE_BOSS_HP_MULTIPLIER: 3,
-    BAG_INITIAL_CAPACITY: 10000,
-    BAG_CAPACITY_TABLE: Object.freeze([10000, 30000, 120000, 400000, 1000000, 3000000, 10000000, 30000000, 100000000, 300000000]),
+    BOSS_WARNING_DURATION_MS: 650,
+    GUARDIAN_CUTIN_DURATION_MS: 750,
+    BAG_INITIAL_CAPACITY: 5000,
+    BAG_CAPACITY_TABLE: Object.freeze([5000, 30000, 120000, 400000, 1000000, 3000000, 10000000, 30000000, 100000000, 300000000]),
     BAG_CAPACITY_GROWTH: 3,
     BAG_UPGRADE_COST_RATIO: 0.5,
     BAG_PERSISTS_REINCARNATION: true,
@@ -23,9 +25,6 @@
     REGION_BOSS_TIME_LIMIT_MS: 30000,
     BOSS_TIMER_TICK_MS: 100,
     BASE_DPS: 1,
-    LUTIE_TAP_GROWTH: 1.08,
-    LUTIE_UPGRADE_BASE_COST: 10,
-    LUTIE_UPGRADE_COST_GROWTH: 1.09,
     MONSTER_BASE_HP: 10,
     MONSTER_HP_GROWTH: 1.15,
     MONSTER_BASE_GOLD: 2,
@@ -34,11 +33,8 @@
     GUARDIAN_ENCOUNTER_HP_MULTIPLIER: 5,
     REGION_BOSS_HP_MULTIPLIER: 10,
     GUARDIAN_BASE_DPS: 11,
-    GUARDIAN_INITIAL_COST: 25,
     GUARDIAN_BASE_DPS_SCALE: 0.25,
     GUARDIAN_DPS_GROWTH: 1.035,
-    GUARDIAN_COST_GROWTH: 1.07,
-    GUARDIAN_DUPLICATE_GOLD_MULTIPLIER: 10,
     GUARDIAN_REINCARNATION_BONUS: 0.10,
     AUTO_ATTACK_INTERVAL_MS: 100,
     AUTO_DAMAGE_DISPLAY_INTERVAL_MS: 1000,
@@ -79,9 +75,15 @@
       return index >= 0 ? index + 1 : table.length + Math.ceil(Math.log(gold / table[table.length - 1]) / Math.log(constants.BAG_CAPACITY_GROWTH));
     },
     normalStageBossHp: (stage) => Balance.monsterBaseHp(stage) * constants.NORMAL_STAGE_BOSS_HP_MULTIPLIER,
+    bossIntroDuration: (type) => constants.BOSS_WARNING_DURATION_MS
+      + (["guardian", "regionBoss"].includes(type) ? constants.GUARDIAN_CUTIN_DURATION_MS : 0),
     balloonDestination: (clearedStage) => clearedStage + constants.BALLOON_SKIP_STAGES,
-    lutieTap: (level) => Math.max(1, safeFloor(level * Math.pow(constants.LUTIE_TAP_GROWTH, level - 1))),
-    lutieUpgradeCost: (level) => Math.max(1, safeFloor(constants.LUTIE_UPGRADE_BASE_COST * Math.pow(constants.LUTIE_UPGRADE_COST_GROWTH, level - 1))),
+    lutieTap: (level) => Math.max(1, safeFloor(level)),
+    // Confirmed linear through target Lv100; the 100-level multiplier above that is temporary policy.
+    lutieUpgradeCost: (level) => {
+      const targetLevel = Math.max(2, safeFloor(level) + 1);
+      return targetLevel * Math.ceil(targetLevel / 100);
+    },
     monsterBaseHp: (stage) => Math.max(1, safeFloor(constants.MONSTER_BASE_HP * Math.pow(constants.MONSTER_HP_GROWTH, stage - 1))),
     monsterGold: (stage) => Math.max(1, safeFloor(constants.MONSTER_BASE_GOLD * Math.pow(constants.MONSTER_GOLD_GROWTH, stage - 1))),
     isGuardianEncounterStage: (stage) => stage % constants.REGION_LENGTH === constants.GUARDIAN_ENCOUNTER_OFFSET,
@@ -101,7 +103,7 @@
       return this.isBossStage(stage) ? base * this.bossMultiplier(stage) : base;
     },
     guardianBaseDps: (level, baseDps) => Math.max(1, safeFloor(baseDps * constants.GUARDIAN_BASE_DPS_SCALE * level * Math.pow(constants.GUARDIAN_DPS_GROWTH, level - 1))),
-    guardianUpgradeCost: (level) => Math.max(1, safeFloor(constants.GUARDIAN_INITIAL_COST * Math.pow(constants.GUARDIAN_COST_GROWTH, level - 1))),
+    guardianUpgradeCost: (level) => Math.max(2, safeFloor(level) * 2),
     reincarnationStars: (highestStage) => Math.max(1, safeFloor(highestStage / 10)),
     artifactUpgradeCost: (level) => level + 1,
     artifactMultiplier: (level) => 1 + level * constants.ARTIFACT_BONUS_PER_LEVEL,
@@ -113,7 +115,6 @@
     mimicMaxHp: (stage) => Math.max(1, safeFloor(Balance.monsterBaseHp(stage) * constants.MIMIC_HP_MULTIPLIER)),
     nazarMaxHp: (stage, escalation) => Math.max(1, safeFloor(Balance.monsterBaseHp(stage) * constants.NAZAR_INITIAL_HP_MULTIPLIER * Math.pow(constants.NAZAR_ESCALATION_MULTIPLIER, escalation))),
     mimicGold: (stage) => Math.max(1, safeFloor(Balance.monsterGold(stage) * constants.MIMIC_GOLD_MULTIPLIER)),
-    duplicateGuardianGold: (stage) => Math.max(1, safeFloor(Balance.monsterGold(stage) * constants.GUARDIAN_DUPLICATE_GOLD_MULTIPLIER))
   });
 
   global.Balance = Balance;

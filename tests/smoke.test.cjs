@@ -54,6 +54,13 @@ const createStartedGame = (adapter = new MemoryAdapter(), runtime = steadyRuntim
   return game;
 };
 const defeatCurrent = (game) => {
+  const intro = game.getState().bossIntro;
+  if (intro) {
+    game.start();
+    clock += intro.remainingMs;
+    game.automaticTick(clock);
+    game.stop();
+  }
   const initial = game.getState().monster;
   let safety = 0;
   while (game.getState().monster.type === initial.type && game.getState().monster.name === initial.name && game.getState().monster.hp <= initial.hp && safety++ < 100000) {
@@ -62,6 +69,14 @@ const defeatCurrent = (game) => {
     if (game.getState().monster.hp > before || game.getState().monster.type !== initial.type || game.getState().monster.name !== initial.name) break;
   }
   assert.ok(safety < 100000, "Combat remains within safety limit");
+};
+const finishBossIntro = (game) => {
+  const intro = game.getState().bossIntro;
+  if (!intro) return;
+  game.start();
+  clock += intro.remainingMs;
+  game.automaticTick(clock);
+  game.stop();
 };
 const reachStage = (game, target) => {
   let safety = 0;
@@ -96,7 +111,7 @@ normalizedGuardianSeed.guardians.forEach((guardian, index) => {
 normalizedGuardianSeed.artifacts.dps.level = 0;
 normalizedGuardianSeed.manaStones = [];
 const normalizedGuardianGame = createStartedGame(new MemoryAdapter(normalizedGuardianSeed));
-assert.deepEqual(normalizedGuardianGame.getState().guardians.map((guardian) => guardian.level), Array.from({ length: 10 }, (_, index) => 7 + index), "Existing save Guardian levels remain intact");
+assert.deepEqual(normalizedGuardianGame.getState().guardians.map((guardian) => guardian.level), Array.from({ length: 31 }, (_, index) => 7 + index), "Existing save Guardian levels remain intact while the roster expands");
 for (const level of [1, 10, 50]) {
   const sameLevelSave = JSON.parse(normalizedGuardianGame.exportSave());
   sameLevelSave.guardians.forEach((guardian) => { guardian.level = level; });
@@ -140,10 +155,13 @@ regionRewardGame.attack();
 assert.equal(regionRewardGame.getState().gold, stage50BaseGold, "Region Boss Gold remains fixed and bypasses normal variance");
 
 // 3-6: roster and Guardian encounter/acquisition/DPS aggregation.
-assert.equal(state.guardians.length, 10, "3. Ten-member Guardian roster is created");
+assert.equal(state.guardians.length, 31, "3. Thirty-one-member Guardian roster is created");
 reachStage(game, 5);
+for (let index = 0; index < 9; index++) defeatCurrent(game);
 state = game.getState();
 assert.equal(state.monster.type, "guardian", "4. Stage 5 is a Guardian encounter");
+finishBossIntro(game);
+state = game.getState();
 assert.equal(state.boss.timeRemainingMs, 30000);
 const encounteredGuardianId = state.monster.guardianId;
 defeatCurrent(game);
@@ -175,6 +193,8 @@ reachStage(game, 10);
 for (let index = 0; index < 9; index++) defeatCurrent(game);
 state = game.getState();
 assert.equal(state.monster.type, "regionBoss", "7. Stage 10 is a Region Boss");
+finishBossIntro(game);
+state = game.getState();
 assert.equal(state.boss.timeRemainingMs, 30000, "8. Region Boss timer starts at 30 seconds");
 game.bossTimerTick(state.boss.deadlineAt);
 state = game.getState();
@@ -186,6 +206,7 @@ const restored = createStartedGame(adapter);
 assert.equal(restored.getState().progression.farmingBeforeBoss, true, "30. Boss farming state survives save/load");
 assert.equal(restored.getState().progression.pendingBossStage, 10);
 assert.equal(restored.challengeBoss(), true, "10. Manual Boss retry succeeds");
+finishBossIntro(restored);
 state = restored.getState();
 assert.equal(state.stage, 10);
 assert.equal(state.monster.type, "regionBoss");
@@ -199,12 +220,13 @@ assert.equal(state.manaStones.at(-1).level, 10, "Region Boss Stone level matches
 assert.equal(state.manaStones.at(-1).rarity, "NORMAL", "Region Boss gives NORMAL unless the HIGH roll succeeds");
 
 reachStage(restored, 15);
+for (let index = 0; index < 9; index++) defeatCurrent(restored);
 assert.equal(restored.getState().monster.type, "guardian");
 assert.equal(restored.giveUpBoss(), true, "GIVE UP immediately exits a timed encounter");
-assert.equal(restored.getState().stage, 14);
+assert.equal(restored.getState().stage, 15);
 assert.equal(restored.getState().progression.farmingBeforeBoss, true);
 for (let index = 0; index < 12; index += 1) defeatCurrent(restored);
-assert.equal(restored.getState().stage, 14, "Farming never re-enters the encounter automatically");
+assert.equal(restored.getState().stage, 15, "Farming never re-enters the encounter automatically");
 assert.equal(restored.challengeBoss(), true);
 assert.equal(restored.getState().stage, 15, "CHALLENGE BOSS retries after GIVE UP");
 
@@ -430,7 +452,7 @@ const v1 = {
   monster: { name: "Mossling", isBoss: false, hp: 12, maxHp: context.Balance.monsterBaseHp(9) }
 };
 const migrated = createStartedGame(new MemoryAdapter(v1)).getState();
-assert.equal(migrated.saveVersion, 6, "31. v1 save migrates to v6");
+assert.equal(migrated.saveVersion, 7, "31. v1 save migrates to v7");
 assert.equal(migrated.gold, 123);
 assert.equal(migrated.stage, 10);
 assert.equal(migrated.lutie.level, 7);
@@ -450,7 +472,7 @@ v2.manaStones = [{ id: "v2-stone", level: 20, rarity: "HIGH", power: context.Bal
 const migratedV2Adapter = new MemoryAdapter(v2);
 const migratedV2Game = createStartedGame(migratedV2Adapter);
 const migratedV2 = migratedV2Game.getState();
-assert.equal(migratedV2.saveVersion, 6, "v0.2 save migrates to v6");
+assert.equal(migratedV2.saveVersion, 7, "v0.2 save migrates to v7");
 assert.equal(migratedV2.guardians[0].level, 17);
 assert.equal(migratedV2.guardians[0].reincarnationLevel, 3);
 assert.equal(migratedV2.guardians[0].equippedManaStoneId, "v2-stone");
@@ -491,7 +513,7 @@ assert.equal(derivedAdapter.data.monster.maxHp, undefined, "Persistent payload o
 
 // 32-34: export, invalid import, complete reset.
 const exported = upgradeGame.exportSave();
-assert.equal(JSON.parse(exported).saveVersion, 6, "32. Export produces valid JSON");
+assert.equal(JSON.parse(exported).saveVersion, 7, "32. Export produces valid JSON");
 const beforeInvalidImport = upgradeGame.exportSave();
 assert.equal(upgradeGame.importSave("{bad json").ok, false);
 assert.equal(upgradeGame.exportSave(), beforeInvalidImport, "33. Invalid JSON does not damage current state");
@@ -509,4 +531,4 @@ assert.equal(state.progression.farmingBeforeBoss, false);
 assert.equal(state.run.nazarEscalation, 0);
 assert.equal(upgradeGame.getTotalDps(), 1);
 
-console.log("v0.3 legacy smoke test passed: normalized Guardian DPS, centered normal Gold variance, Pages workflow, and prior coverage.");
+console.log("v0.4 smoke test passed: Guardian progression, normalized Guardian DPS, centered normal Gold variance, Pages workflow, and prior coverage.");

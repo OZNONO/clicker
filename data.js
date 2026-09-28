@@ -1,15 +1,18 @@
 (function (global) {
   "use strict";
 
-  // Placeholder content for the personal reconstruction prototype.
-  // Names and values are not verified original game data.
-  const guardianGroups = ["HUMAN", "MACHINE", "BEAST", "DRAGON", "FAIRY", "SPIRIT", "ANGEL", "DEMON", "HUMAN", "MACHINE"];
-  const GUARDIAN_DEFINITIONS = Object.freeze(Array.from({ length: 10 }, (_, index) => Object.freeze({
+  // Names are the documented normal-Guardian roster. Group and DPS metadata remain prototype defaults.
+  const guardianNames = Object.freeze([
+    "아르", "아리엘", "아이멜", "안테아", "에단", "에밀리", "엘라임", "오르페오", "올리비에", "가이아",
+    "도로시", "라엘", "브린힐트", "파라켈", "필리아", "티타니아", "일레노아", "제라드", "라이언", "레이너",
+    "로렌스", "로이드", "루시드", "루시퍼", "리리엘", "세실리", "셀리온", "소냐", "스텔라", "시그룬", "실피드"
+  ]);
+  const GUARDIAN_DEFINITIONS = Object.freeze(guardianNames.map((name, index) => Object.freeze({
     id: `guardian-${String(index + 1).padStart(2, "0")}`,
-    name: `Guardian ${String(index + 1).padStart(2, "0")}`,
+    name,
     baseDps: Balance.constants.GUARDIAN_BASE_DPS,
     unlockOrder: index + 1,
-    group: guardianGroups[index]
+    group: "UNCLASSIFIED"
   })));
 
   const ARTIFACT_DEFINITIONS = Object.freeze([

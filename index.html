@@ -4,19 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17122a">
-  <title>Lutie-like RPG Clicker v0.3.2</title>
+  <title>Lutie-like RPG Clicker v0.4</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <main class="game-shell">
     <header class="top-bar">
-      <div class="brand"><span class="brand-mark">L</span><span>LUTIE<br><small>CLICKER v0.3.2</small></span></div>
+      <div class="brand"><span class="brand-mark">L</span><span>LUTIE<br><small>CLICKER v0.4</small></span></div>
       <div class="resource"><span data-i18n="STAGE">STAGE</span><strong id="stageValue">1</strong></div>
-      <div class="resource gold"><span data-i18n="GOLD / CAPACITY">GOLD / CAPACITY</span><strong id="goldValue">0</strong><small id="goldCapacity">/ 10,000</small></div>
+      <div class="resource gold"><span data-i18n="GOLD / CAPACITY">GOLD / CAPACITY</span><strong id="goldValue">0</strong><small id="goldCapacity">/ 5,000</small></div>
     </header>
 
     <section class="arena" id="attackArea" aria-label="Attack area" data-i18n-aria="Attack area">
       <div class="arena-glow"></div>
+      <div class="boss-intro-overlay" id="bossIntroOverlay" aria-live="assertive" hidden>
+        <strong class="warning-title">WARNING</strong>
+        <div class="guardian-cutin" id="guardianCutin" hidden><small data-i18n="GUARDIAN ENCOUNTER">GUARDIAN ENCOUNTER</small><strong id="guardianCutinName"></strong></div>
+      </div>
       <div class="encounter-badge" id="encounterBadge" hidden>REGION BOSS</div>
       <div class="monster-meta">
         <div><small id="stageLabel">STAGE 1</small><span class="monster-name" id="monsterName">Mossling</span></div>
@@ -54,7 +58,7 @@
         <div class="section-title"><div><small data-i18n="HERO">HERO</small><h2>Lutie</h2></div><span class="level" id="lutieLevel">LV. 1</span></div>
         <div class="summary-grid">
           <div><span data-i18n="TAP DAMAGE">TAP DAMAGE</span><strong id="lutieTap">1</strong></div>
-          <div><span data-i18n="NEXT COST">NEXT COST</span><strong class="coin-value" id="lutieCost">10</strong></div>
+          <div><span data-i18n="NEXT COST">NEXT COST</span><strong class="coin-value" id="lutieCost">2</strong></div>
         </div>
         <div class="purchase-row">
           <button class="purchase-button" id="lutieUpgrade">+1</button>
@@ -62,8 +66,8 @@
           <button class="purchase-button" id="lutieUpgradeMax">MAX</button>
         </div>
         <div class="bag-card">
-          <strong id="bagLevel">BAG Lv. 1</strong><span id="bagGold">0 / 10,000 G</span>
-          <button class="purchase-button" id="upgradeBag">UPGRADE BAG · 5,000 G</button>
+          <strong id="bagLevel">BAG Lv. 1</strong><span id="bagGold">0 / 5,000 G</span>
+          <button class="purchase-button" id="upgradeBag">UPGRADE BAG · 2,500 G</button>
         </div>
         <details class="offline-summary" id="offlineSummary" hidden open>
           <summary data-i18n="OFFLINE PROGRESS">OFFLINE PROGRESS</summary><small data-i18n="Temporary automatic-DPS prototype">Temporary automatic-DPS prototype</small><dl id="offlineDetails"></dl>

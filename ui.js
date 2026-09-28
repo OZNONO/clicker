@@ -9,6 +9,7 @@
     offlineSummary: $("offlineSummary"), offlineDetails: $("offlineDetails"), language: $("language"),
     stage: $("stageValue"), gold: $("goldValue"), stageLabel: $("stageLabel"), name: $("monsterName"), kills: $("killCount"),
     hp: $("hpValue"), hpFill: $("hpFill"), encounterBadge: $("encounterBadge"), attackArea: $("attackArea"),
+    bossIntroOverlay: $("bossIntroOverlay"), guardianCutin: $("guardianCutin"), guardianCutinName: $("guardianCutinName"),
     nazarIndicator: $("nazarIndicator"), giveUpBoss: $("giveUpBoss"),
     bossTimerWrap: $("bossTimerWrap"), bossTimerValue: $("bossTimerValue"), farmingBanner: $("farmingBanner"),
     farmingStage: $("farmingStage"), nextBossHp: $("nextBossHp"), challengeBoss: $("challengeBoss"),
@@ -69,25 +70,32 @@
   function renderCombat(state) {
     const monster = state.monster;
     const hpPercent = monster.type === "nazar" ? 100 : Math.max(0, Math.min(100, monster.hp / monster.maxHp * 100));
-    const badgeByType = { stageBoss: "STAGE BOSS · 10 / 10", guardian: "GUARDIAN", regionBoss: "REGION BOSS · 10 / 10", mimic: "MIMIC", nazar: "NAZAR" };
+    const badgeByType = { stageBoss: "STAGE BOSS · 10 / 10", guardian: "GUARDIAN · 10 / 10", regionBoss: "REGION-FINAL GUARDIAN · 10 / 10", mimic: "MIMIC", nazar: "NAZAR" };
+    const introActive = Boolean(state.bossIntro);
     elements.stage.textContent = formatNumber(state.stage);
     elements.gold.textContent = formatGold(state.gold);
     elements.stageLabel.textContent = t("STAGE {stage}", { stage: formatNumber(state.stage) });
-    elements.name.textContent = monster.type === "stageBoss" ? t("Stage {stage} Sentinel", { stage: state.stage }) : monster.type === "regionBoss" ? t("Region {region} Warden", { region: Math.floor(state.stage / 10) }) : monster.name;
+    elements.name.textContent = monster.type === "stageBoss" ? t("Stage {stage} Sentinel", { stage: state.stage }) : monster.name;
     elements.kills.textContent = monster.type === "normal" ? t("MONSTER {number} / {total}", { number: Math.min(9, state.killsInStage + 1), total: Balance.constants.MONSTERS_PER_STAGE }) : t(badgeByType[monster.type] || "SPECIAL");
     elements.hp.textContent = monster.type === "nazar" ? "??? / ???" : `${formatNumber(monster.hp)} / ${formatNumber(monster.maxHp)}`;
     elements.hpFill.style.width = `${hpPercent}%`;
     elements.attackArea.classList.toggle("nazar", monster.type === "nazar");
     elements.encounterBadge.hidden = !badgeByType[monster.type];
     elements.encounterBadge.textContent = state.balloonChallenge ? t("BALLOON CHALLENGE · Stage {stage}", { stage: state.stage }) : t(badgeByType[monster.type] || "");
-    elements.bossTimerWrap.hidden = !monster.isTimed;
-    elements.giveUpBoss.hidden = !monster.isTimed;
+    elements.bossTimerWrap.hidden = !monster.isTimed || introActive;
+    elements.giveUpBoss.hidden = !monster.isTimed || introActive;
     elements.bossTimerValue.textContent = ((state.boss.timeRemainingMs || 0) / 1000).toFixed(1);
     elements.farmingBanner.hidden = !state.progression.farmingBeforeBoss;
     elements.farmingStage.textContent = t("FARMING STAGE {stage}", { stage: state.stage });
     const pendingStage = state.progression.pendingBossStage || state.stage + 1;
     elements.nextBossHp.textContent = t("NEXT BOSS HP: {hp}", { hp: formatNumber(state.progression.pendingEncounterType === "stageBoss" ? Balance.normalStageBossHp(pendingStage) : Balance.monsterMaxHp(pendingStage)) });
     elements.attackArea.classList.toggle("farming", state.progression.farmingBeforeBoss);
+    elements.attackArea.classList.toggle("intro-active", introActive);
+    elements.bossIntroOverlay.hidden = !introActive;
+    const guardianIntro = introActive && Boolean(monster.guardianId);
+    elements.bossIntroOverlay.classList.toggle("guardian", guardianIntro);
+    elements.guardianCutin.hidden = !guardianIntro;
+    elements.guardianCutinName.textContent = guardianIntro ? monster.name : "";
     const indicator = game.getNazarIndicatorState();
     elements.nazarIndicator.hidden = !indicator.visible;
     elements.nazarIndicator.classList.toggle("active", indicator.active);
@@ -402,7 +410,7 @@
       if (event.defeated) playEncounterTransition(event.defeatedMonster.type, state);
       else if (!event.smooth) replayMonsterHit(isAuto ? "hit-soft" : "hit-strong", state);
     }
-    if (["bossChallenge", "bossFailed", "balloon", "balloonFailed", "nazarForced", "reincarnated"].includes(event.type)) clearMonsterTransitions();
+    if (["bossChallenge", "bossFailed", "bossIntroEnded", "balloon", "balloonFailed", "nazarForced", "reincarnated"].includes(event.type)) clearMonsterTransitions();
     if (event.type === "guardianAcquired") showAcquisition(event.guardian, event.dps);
     if (event.type === "manaStoneDropped") showStoneAcquisition(event.stone);
     if (event.type === "saved") showToast(t("Save complete"));
